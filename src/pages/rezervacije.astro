@@ -1,0 +1,574 @@
+---
+import AppLayout from '../layouts/AppLayout.astro';
+import { createSupabaseServerClient, createSupabaseAdminClient } from '../lib/supabase';
+import type { Reservation, Apartment } from '../lib/types';
+import { getReservationStatus, STATUS_LABELS, STATUS_COLORS, PAYMENT_TYPE_LABELS } from '../lib/types';
+
+const supabase = createSupabaseServerClient(Astro.request, Astro.cookies);
+const { data: { user } } = await supabase.auth.getUser();
+if (!user) return Astro.redirect('/login');
+
+const profile = Astro.locals.user!;
+const adminSupabase = createSupabaseAdminClient();
+
+// Dohvati uloge korisnika
+const { data: myApartmentUsers } = await adminSupabase
+  .from('apartment_users')
+  .select('apartment_id, role')
+  .eq('user_id', user.id);
+
+const isAdmin = (myApartmentUsers ?? []).some((au) => au.role === 'admin');
+const adminApartmentIds = (myApartmentUsers ?? []).filter((au) => au.role === 'admin').map((au) => au.apartment_id);
+const allApartmentIds = (myApartmentUsers ?? []).map((au) => au.apartment_id);
+
+if (allApartmentIds.length === 0) return Astro.redirect('/');
+
+// Dohvati apartmane
+const { data: apartmentsData } = await adminSupabase
+  .from('apartments')
+  .select('id, name')
+  .in('id', allApartmentIds)
+  .eq('is_deleted', false);
+
+const allApartments = apartmentsData ?? [];
+const adminApartments = allApartments.filter((a) => adminApartmentIds.includes(a.id));
+
+// URL parametri
+const tab = Astro.url.searchParams.get('tab') ?? 'nadolazece';
+const filterApartmentId = Astro.url.searchParams.get('apartment_id') ?? '';
+const success = Astro.url.searchParams.get('success');
+const error = Astro.url.searchParams.get('error');
+
+// Dohvati rezervacije
+const aptIds = filterApartmentId
+  ? [filterApartmentId]
+  : (isAdmin ? adminApartmentIds : allApartmentIds);
+
+let reservationsQuery = adminSupabase
+  .from('reservations')
+  .select('*')
+  .in('apartment_id', aptIds.length > 0 ? aptIds : ['none'])
+  .order('check_in', { ascending: false });
+
+// Filter po tabu
+if (tab === 'otkazane') {
+  reservationsQuery = reservationsQuery.eq('status', 'cancelled');
+} else {
+  reservationsQuery = reservationsQuery.eq('status', 'active');
+}
+
+const { data: rawReservations } = await reservationsQuery;
+
+// Filter po computed statusu (tab)
+const today = new Date();
+today.setHours(0, 0, 0, 0);
+
+let reservations = (rawReservations ?? []).filter((r) => {
+  const s = getReservationStatus(r);
+  if (tab === 'sve') return true;
+  if (tab === 'nadolazece') return s === 'upcoming';
+  if (tab === 'u-toku') return s === 'active';
+  if (tab === 'zavrsene') return s === 'completed';
+  if (tab === 'otkazane') return s === 'cancelled';
+  return true;
+});
+
+// Sortiraj nadolazeće uzlazno, ostale silazno
+if (tab === 'nadolazece') {
+  reservations = reservations.sort((a, b) => a.check_in.localeCompare(b.check_in));
+} else {
+  reservations = reservations.sort((a, b) => b.check_in.localeCompare(a.check_in));
+}
+
+// Dohvati nazive apartmana za prikaz
+const aptMap = new Map(allApartments.map((a) => [a.id, a.name]));
+
+function formatDate(d: string): string {
+  const [y, m, day] = d.split('-');
+  return `${day}.${m}.${y}`;
+}
+
+function formatCurrency(n: number | null): string {
+  if (n === null || n === undefined) return '—';
+  return new Intl.NumberFormat('hr-HR', { style: 'currency', currency: 'EUR' }).format(n);
+}
+
+const tabs = [
+  { key: 'nadolazece', label: 'Nadolazeće' },
+  { key: 'u-toku', label: 'U toku' },
+  { key: 'sve', label: 'Sve' },
+  { key: 'zavrsene', label: 'Završene' },
+  { key: 'otkazane', label: 'Otkazane' },
+];
+---
+
+<AppLayout title="Rezervacije" user={profile} isAdmin={isAdmin} activeRoute="/rezervacije">
+  <div class="p-6 max-w-7xl mx-auto">
+
+    <!-- Header -->
+    <div class="flex items-center justify-between mb-6">
+      <div>
+        <h1 class="text-2xl font-bold text-gray-900">Rezervacije</h1>
+        <p class="text-gray-500 text-sm mt-1">{reservations.length} rezervacij{reservations.length === 1 ? 'a' : reservations.length < 5 ? 'e' : 'a'}</p>
+      </div>
+      {isAdmin && (
+        <button
+          onclick="openAddModal()"
+          class="btn-primary"
+        >
+          + Dodaj rezervaciju
+        </button>
+      )}
+    </div>
+
+    <!-- Obavijesti -->
+    {success && (
+      <div class="mb-4 rounded-lg bg-green-50 border border-green-200 p-3">
+        <p class="text-sm text-green-700">
+          {success === 'created' && 'Rezervacija je uspješno kreirana.'}
+          {success === 'updated' && 'Rezervacija je uspješno ažurirana.'}
+          {success === 'deleted' && 'Rezervacija je uspješno obrisana.'}
+          {success === 'cancelled' && 'Rezervacija je otkazana.'}
+        </p>
+      </div>
+    )}
+    {error && (
+      <div class="mb-4 rounded-lg bg-red-50 border border-red-200 p-3">
+        <p class="text-sm text-red-600">{error}</p>
+      </div>
+    )}
+
+    <!-- Filteri i tabovi -->
+    <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+      <!-- Tabovi -->
+      <div class="flex gap-1 bg-gray-100 rounded-lg p-1">
+        {tabs.map((t) => (
+          <a
+            href={`/rezervacije?tab=${t.key}${filterApartmentId ? `&apartment_id=${filterApartmentId}` : ''}`}
+            class={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+              tab === t.key
+                ? 'bg-white text-gray-900 shadow-sm'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            {t.label}
+          </a>
+        ))}
+      </div>
+
+      <!-- Filter apartman -->
+      <form method="GET" action="/rezervacije" id="filter-form">
+        <input type="hidden" name="tab" value={tab} />
+        <select
+          name="apartment_id"
+          onchange="document.getElementById('filter-form').submit()"
+          class="input py-1.5 text-sm w-auto"
+        >
+          <option value="">Svi apartmani</option>
+          {allApartments.map((apt) => (
+            <option value={apt.id} selected={filterApartmentId === apt.id}>{apt.name}</option>
+          ))}
+        </select>
+      </form>
+    </div>
+
+    <!-- Tablica -->
+    {reservations.length === 0 ? (
+      <div class="card p-12 text-center">
+        <div class="text-gray-400 mb-4">
+          <svg class="mx-auto h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+              d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+          </svg>
+        </div>
+        <h3 class="text-lg font-medium text-gray-900 mb-2">Nema rezervacija</h3>
+        <p class="text-gray-500">Nema rezervacija u ovoj kategoriji.</p>
+      </div>
+    ) : (
+      <div class="table-wrapper overflow-x-auto">
+        <table class="w-full text-sm min-w-[900px]">
+          <thead>
+            <tr>
+              <th class="table-head px-4 py-3 text-left">Gost</th>
+              <th class="table-head px-4 py-3 text-left">Apartman</th>
+              <th class="table-head px-4 py-3 text-left">Check-in</th>
+              <th class="table-head px-4 py-3 text-left">Check-out</th>
+              <th class="table-head px-4 py-3 text-left">Gosti</th>
+              <th class="table-head px-4 py-3 text-left">Plaćanje</th>
+              <th class="table-head px-4 py-3 text-right">Bruto</th>
+              <th class="table-head px-4 py-3 text-right">Provizija</th>
+              <th class="table-head px-4 py-3 text-right">Neto</th>
+              <th class="table-head px-4 py-3 text-center">Dok.</th>
+              <th class="table-head px-4 py-3 text-center">Prijava</th>
+              <th class="table-head px-4 py-3 text-center">Plaćeno</th>
+              <th class="table-head px-4 py-3 text-left">Status</th>
+              {isAdmin && <th class="table-head px-4 py-3"></th>}
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100">
+            {reservations.map((r) => {
+              const neto = (r.amount_gross ?? 0) - (r.commission ?? 0);
+              const computedStatus = getReservationStatus(r);
+              return (
+                <tr class="table-row" id={`row-${r.id}`}>
+                  <td class="table-cell font-medium text-gray-900">
+                    <div>{r.guest_name}</div>
+                    {r.guest_phone && <div class="text-xs text-gray-400">{r.guest_phone}</div>}
+                  </td>
+                  <td class="table-cell text-gray-500">{aptMap.get(r.apartment_id) ?? '—'}</td>
+                  <td class="table-cell text-gray-700 whitespace-nowrap">{formatDate(r.check_in)}</td>
+                  <td class="table-cell text-gray-700 whitespace-nowrap">{formatDate(r.check_out)}</td>
+                  <td class="table-cell text-gray-500 text-center">{r.num_guests}</td>
+                  <td class="table-cell text-gray-500">
+                    {r.payment_type ? PAYMENT_TYPE_LABELS[r.payment_type] : '—'}
+                  </td>
+                  <td class="table-cell text-right text-gray-700">{formatCurrency(r.amount_gross)}</td>
+                  <td class="table-cell text-right text-gray-500">{formatCurrency(r.commission)}</td>
+                  <td class="table-cell text-right font-medium text-gray-900">{formatCurrency(neto > 0 ? neto : null)}</td>
+                  <td class="table-cell text-center">
+                    <button
+                      onclick={`toggleField('${r.id}', 'documents_received', ${r.documents_received})`}
+                      class={`h-6 w-6 rounded-full border-2 flex items-center justify-center mx-auto transition-colors ${
+                        r.documents_received
+                          ? 'bg-green-500 border-green-500 text-white'
+                          : 'border-gray-300 text-transparent hover:border-gray-400'
+                      }`}
+                      title={r.documents_received ? 'Dokumenti primljeni' : 'Dokumenti nisu primljeni'}
+                    >
+                      <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+                      </svg>
+                    </button>
+                  </td>
+                  <td class="table-cell text-center">
+                    <button
+                      onclick={`toggleField('${r.id}', 'guests_registered', ${r.guests_registered})`}
+                      class={`h-6 w-6 rounded-full border-2 flex items-center justify-center mx-auto transition-colors ${
+                        r.guests_registered
+                          ? 'bg-green-500 border-green-500 text-white'
+                          : 'border-gray-300 text-transparent hover:border-gray-400'
+                      }`}
+                      title={r.guests_registered ? 'Gosti prijavljeni' : 'Gosti nisu prijavljeni'}
+                    >
+                      <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+                      </svg>
+                    </button>
+                  </td>
+                  <td class="table-cell text-center">
+                    <button
+                      onclick={`toggleField('${r.id}', 'is_paid', ${r.is_paid})`}
+                      class={`h-6 w-6 rounded-full border-2 flex items-center justify-center mx-auto transition-colors ${
+                        r.is_paid
+                          ? 'bg-green-500 border-green-500 text-white'
+                          : 'border-gray-300 text-transparent hover:border-gray-400'
+                      }`}
+                      title={r.is_paid ? 'Plaćeno' : 'Nije plaćeno'}
+                    >
+                      <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+                      </svg>
+                    </button>
+                  </td>
+                  <td class="table-cell">
+                    <span class={`badge ${STATUS_COLORS[computedStatus]}`}>
+                      {r.status === 'cancelled' ? 'Otkazana' : STATUS_LABELS[computedStatus]}
+                    </span>
+                  </td>
+                  {isAdmin && (
+                    <td class="table-cell">
+                      <div class="flex items-center gap-1">
+                        <button
+                          onclick={`openEditModal(${JSON.stringify({
+                            id: r.id,
+                            apartment_id: r.apartment_id,
+                            guest_name: r.guest_name,
+                            guest_phone: r.guest_phone ?? '',
+                            check_in: r.check_in,
+                            check_out: r.check_out,
+                            num_guests: r.num_guests,
+                            payment_type: r.payment_type ?? '',
+                            amount_gross: r.amount_gross ?? '',
+                            commission: r.commission ?? '',
+                          })})`}
+                          class="btn-ghost text-xs px-2 py-1"
+                        >
+                          Uredi
+                        </button>
+                        {r.status === 'active' && (
+                          <button
+                            onclick={`confirmCancel('${r.id}', '${r.guest_name.replace(/'/g, "\\'")}')`}
+                            class="btn-ghost text-xs px-2 py-1 text-red-500 hover:bg-red-50 hover:text-red-700"
+                          >
+                            Otkaži
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  )}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    )}
+  </div>
+
+  {/* ── Modali (samo admin) ── */}
+  {isAdmin && (
+    <>
+      {/* Modal: Dodaj rezervaciju */}
+      <div id="modal-add" class="hidden modal-overlay" onclick="closeModalOnOverlay(event, 'modal-add')">
+        <div class="modal-content max-h-[90vh] overflow-y-auto" onclick="event.stopPropagation()">
+          <div class="p-6 border-b border-gray-100">
+            <h2 class="text-lg font-semibold text-gray-900">Dodaj rezervaciju</h2>
+          </div>
+          <form action="/api/rezervacije/create" method="POST" class="p-6 space-y-4">
+            <div class="grid grid-cols-2 gap-4">
+              <div class="col-span-2">
+                <label class="label">Gost (ime i prezime) *</label>
+                <input name="guest_name" type="text" required class="input" placeholder="npr. Ivan Horvat" />
+              </div>
+              <div class="col-span-2">
+                <label class="label">Broj telefona</label>
+                <input name="guest_phone" type="tel" class="input" placeholder="+385..." />
+              </div>
+              <div class="col-span-2">
+                <label class="label">Apartman *</label>
+                <select name="apartment_id" required class="input">
+                  <option value="">Odaberi apartman...</option>
+                  {adminApartments.map((apt) => (
+                    <option value={apt.id}>{apt.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label class="label">Check-in *</label>
+                <input name="check_in" type="date" required class="input" />
+              </div>
+              <div>
+                <label class="label">Check-out *</label>
+                <input name="check_out" type="date" required class="input" />
+              </div>
+              <div>
+                <label class="label">Broj gostiju *</label>
+                <input name="num_guests" type="number" min="1" required class="input" value="1" />
+              </div>
+              <div>
+                <label class="label">Način plaćanja</label>
+                <select name="payment_type" class="input">
+                  <option value="">—</option>
+                  <option value="credit_card">Kartica</option>
+                  <option value="cash">Gotovina</option>
+                  <option value="bank_transfer">Bankovni prijenos</option>
+                  <option value="airbnb">Airbnb</option>
+                  <option value="booking_com">Booking.com</option>
+                </select>
+              </div>
+              <div>
+                <label class="label">Bruto iznos (EUR)</label>
+                <input name="amount_gross" type="number" min="0" step="0.01" class="input" placeholder="0.00" />
+              </div>
+              <div>
+                <label class="label">Provizija (EUR)</label>
+                <input name="commission" type="number" min="0" step="0.01" class="input" placeholder="0.00" />
+              </div>
+            </div>
+            <div class="flex justify-end gap-3 pt-2">
+              <button type="button" onclick="document.getElementById('modal-add').classList.add('hidden')" class="btn-secondary">
+                Odustani
+              </button>
+              <button type="submit" class="btn-primary">Spremi</button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      {/* Modal: Uredi rezervaciju */}
+      <div id="modal-edit" class="hidden modal-overlay" onclick="closeModalOnOverlay(event, 'modal-edit')">
+        <div class="modal-content max-h-[90vh] overflow-y-auto" onclick="event.stopPropagation()">
+          <div class="p-6 border-b border-gray-100">
+            <h2 class="text-lg font-semibold text-gray-900">Uredi rezervaciju</h2>
+          </div>
+          <form action="/api/rezervacije/update" method="POST" class="p-6 space-y-4">
+            <input type="hidden" name="id" id="edit-id" />
+            <div class="grid grid-cols-2 gap-4">
+              <div class="col-span-2">
+                <label class="label">Gost (ime i prezime) *</label>
+                <input id="edit-guest_name" name="guest_name" type="text" required class="input" />
+              </div>
+              <div class="col-span-2">
+                <label class="label">Broj telefona</label>
+                <input id="edit-guest_phone" name="guest_phone" type="tel" class="input" />
+              </div>
+              <div class="col-span-2">
+                <label class="label">Apartman *</label>
+                <select id="edit-apartment_id" name="apartment_id" required class="input">
+                  <option value="">Odaberi apartman...</option>
+                  {adminApartments.map((apt) => (
+                    <option value={apt.id}>{apt.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label class="label">Check-in *</label>
+                <input id="edit-check_in" name="check_in" type="date" required class="input" />
+              </div>
+              <div>
+                <label class="label">Check-out *</label>
+                <input id="edit-check_out" name="check_out" type="date" required class="input" />
+              </div>
+              <div>
+                <label class="label">Broj gostiju *</label>
+                <input id="edit-num_guests" name="num_guests" type="number" min="1" required class="input" />
+              </div>
+              <div>
+                <label class="label">Način plaćanja</label>
+                <select id="edit-payment_type" name="payment_type" class="input">
+                  <option value="">—</option>
+                  <option value="credit_card">Kartica</option>
+                  <option value="cash">Gotovina</option>
+                  <option value="bank_transfer">Bankovni prijenos</option>
+                  <option value="airbnb">Airbnb</option>
+                  <option value="booking_com">Booking.com</option>
+                </select>
+              </div>
+              <div>
+                <label class="label">Bruto iznos (EUR)</label>
+                <input id="edit-amount_gross" name="amount_gross" type="number" min="0" step="0.01" class="input" />
+              </div>
+              <div>
+                <label class="label">Provizija (EUR)</label>
+                <input id="edit-commission" name="commission" type="number" min="0" step="0.01" class="input" />
+              </div>
+            </div>
+            <div class="flex justify-end gap-3 pt-2">
+              <button type="button" onclick="document.getElementById('modal-edit').classList.add('hidden')" class="btn-secondary">
+                Odustani
+              </button>
+              <button type="submit" class="btn-primary">Spremi promjene</button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      {/* Modal: Potvrda otkazivanja */}
+      <div id="modal-cancel" class="hidden modal-overlay" onclick="closeModalOnOverlay(event, 'modal-cancel')">
+        <div class="modal-content p-6" onclick="event.stopPropagation()">
+          <h2 class="text-lg font-semibold text-gray-900 mb-2">Otkaži rezervaciju</h2>
+          <p class="text-gray-600 mb-6">
+            Jeste li sigurni da želite otkazati rezervaciju za gosta <strong id="cancel-name"></strong>?
+          </p>
+          <form action="/api/rezervacije/cancel" method="POST">
+            <input type="hidden" name="id" id="cancel-id" />
+            <div class="flex justify-end gap-3">
+              <button type="button" onclick="document.getElementById('modal-cancel').classList.add('hidden')" class="btn-secondary">
+                Odustani
+              </button>
+              <button type="submit" class="btn-danger">Otkaži rezervaciju</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </>
+  )}
+
+  {/* Toast */}
+  <div id="toast" class="hidden fixed bottom-4 right-4 z-50 rounded-lg px-4 py-3 text-sm font-medium shadow-lg"></div>
+</AppLayout>
+
+<script>
+  function closeModalOnOverlay(event: MouseEvent, id: string) {
+    if (event.target === document.getElementById(id)) {
+      document.getElementById(id)?.classList.add('hidden');
+    }
+  }
+
+  function openAddModal() {
+    document.getElementById('modal-add')?.classList.remove('hidden');
+  }
+
+  function openEditModal(r: {
+    id: string; apartment_id: string; guest_name: string; guest_phone: string;
+    check_in: string; check_out: string; num_guests: number; payment_type: string;
+    amount_gross: number | string; commission: number | string;
+  }) {
+    (document.getElementById('edit-id') as HTMLInputElement).value = r.id;
+    (document.getElementById('edit-guest_name') as HTMLInputElement).value = r.guest_name;
+    (document.getElementById('edit-guest_phone') as HTMLInputElement).value = r.guest_phone;
+    (document.getElementById('edit-apartment_id') as HTMLSelectElement).value = r.apartment_id;
+    (document.getElementById('edit-check_in') as HTMLInputElement).value = r.check_in;
+    (document.getElementById('edit-check_out') as HTMLInputElement).value = r.check_out;
+    (document.getElementById('edit-num_guests') as HTMLInputElement).value = String(r.num_guests);
+    (document.getElementById('edit-payment_type') as HTMLSelectElement).value = r.payment_type;
+    (document.getElementById('edit-amount_gross') as HTMLInputElement).value = String(r.amount_gross);
+    (document.getElementById('edit-commission') as HTMLInputElement).value = String(r.commission);
+    document.getElementById('modal-edit')?.classList.remove('hidden');
+  }
+
+  function confirmCancel(id: string, name: string) {
+    (document.getElementById('cancel-id') as HTMLInputElement).value = id;
+    (document.getElementById('cancel-name') as HTMLElement).textContent = name;
+    document.getElementById('modal-cancel')?.classList.remove('hidden');
+  }
+
+  function showToast(message: string, type: 'success' | 'error' = 'success') {
+    const toast = document.getElementById('toast');
+    if (!toast) return;
+    toast.textContent = message;
+    toast.className = `fixed bottom-4 right-4 z-50 rounded-lg px-4 py-3 text-sm font-medium shadow-lg ${
+      type === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'
+    }`;
+    toast.classList.remove('hidden');
+    setTimeout(() => toast.classList.add('hidden'), 3000);
+  }
+
+  async function toggleField(id: string, field: string, currentValue: boolean) {
+    try {
+      const res = await fetch('/api/rezervacije/toggle-field', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, field, value: !currentValue }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        // Vizualno ažuriraj gumb bez reloada
+        const row = document.getElementById(`row-${id}`);
+        if (row) {
+          const fieldIndex: Record<string, number> = {
+            documents_received: 9,
+            guests_registered: 10,
+            is_paid: 11,
+          };
+          const colIdx = fieldIndex[field];
+          const btn = row.querySelectorAll('td')[colIdx]?.querySelector('button');
+          if (btn) {
+            const newVal = !currentValue;
+            btn.setAttribute('onclick', `toggleField('${id}', '${field}', ${newVal})`);
+            if (newVal) {
+              btn.className = btn.className
+                .replace('border-gray-300 text-transparent hover:border-gray-400', '')
+                + ' bg-green-500 border-green-500 text-white';
+            } else {
+              btn.className = btn.className
+                .replace('bg-green-500 border-green-500 text-white', '')
+                + ' border-gray-300 text-transparent hover:border-gray-400';
+            }
+          }
+        }
+        showToast('Ažurirano.');
+      } else {
+        showToast(data.error ?? 'Greška pri ažuriranju.', 'error');
+      }
+    } catch {
+      showToast('Greška pri slanju zahtjeva.', 'error');
+    }
+  }
+
+  window.closeModalOnOverlay = closeModalOnOverlay;
+  window.openAddModal = openAddModal;
+  window.openEditModal = openEditModal;
+  window.confirmCancel = confirmCancel;
+  window.toggleField = toggleField;
+</script>
