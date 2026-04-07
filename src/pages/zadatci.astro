@@ -88,20 +88,29 @@ if (allApartmentIds.length > 0) {
 const apartmentUsersMap: Record<string, Array<{ user_id: string; full_name: string; email: string }>> = {};
 
 if (isAdmin && adminApartmentIds.length > 0) {
-  const { data: aptUsers } = await supabase
+  const { data: aptUsers } = await adminSupabase
     .from('apartment_users')
-    .select('apartment_id, user_id, profiles(full_name, email)')
+    .select('apartment_id, user_id')
     .in('apartment_id', adminApartmentIds);
 
+  const auUserIds = [...new Set((aptUsers ?? []).map((au) => au.user_id))];
+  const { data: auProfiles } = await adminSupabase
+    .from('profiles')
+    .select('id, full_name, email')
+    .in('id', auUserIds.length > 0 ? auUserIds : ['none']);
+
+  const auProfilesMap = new Map((auProfiles ?? []).map((p) => [p.id, p]));
+
   for (const au of (aptUsers ?? [])) {
-    if (!au.profiles) continue;
+    const p = auProfilesMap.get(au.user_id);
+    if (!p) continue;
     if (!apartmentUsersMap[au.apartment_id]) {
       apartmentUsersMap[au.apartment_id] = [];
     }
     apartmentUsersMap[au.apartment_id].push({
       user_id: au.user_id,
-      full_name: (au.profiles as any).full_name,
-      email: (au.profiles as any).email,
+      full_name: p.full_name ?? 'Nepoznat',
+      email: p.email ?? '',
     });
   }
 }
