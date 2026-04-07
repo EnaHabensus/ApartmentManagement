@@ -41,6 +41,22 @@ export const POST: APIRoute = async ({ request, cookies, redirect }) => {
     return redirect('/rezervacije?error=' + encodeURIComponent('Check-out mora biti nakon check-in datuma.'));
   }
 
+  // Provjeri preklapanje s postojećim rezervacijama
+  const { data: overlapping } = await adminSupabase
+    .from('reservations')
+    .select('id, guest_name, check_in, check_out')
+    .eq('apartment_id', apartment_id)
+    .eq('status', 'active')
+    .lt('check_in', check_out)
+    .gt('check_out', check_in);
+
+  if (overlapping && overlapping.length > 0) {
+    const o = overlapping[0];
+    return redirect('/rezervacije?error=' + encodeURIComponent(
+      `Apartman je već rezerviran od ${o.check_in} do ${o.check_out} (${o.guest_name}).`
+    ));
+  }
+
   const amount_gross = amount_gross_raw ? parseFloat(amount_gross_raw) : null;
   const commission = commission_raw ? parseFloat(commission_raw) : null;
 
