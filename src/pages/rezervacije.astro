@@ -211,7 +211,7 @@ const tabs = [
               const computedStatus = getReservationStatus(r);
               return (
                 <tr class="table-row" id={`row-${r.id}`}>
-                  <td class="table-cell font-medium text-gray-900">
+                  <td class="table-cell font-medium text-gray-900 whitespace-nowrap">
                     <div>{r.guest_name}</div>
                     {r.guest_phone && <div class="text-xs text-gray-400">{r.guest_phone}</div>}
                   </td>
