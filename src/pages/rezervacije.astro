@@ -23,15 +23,16 @@ const allApartmentIds = (myApartmentUsers ?? []).map((au) => au.apartment_id);
 
 if (allApartmentIds.length === 0) return Astro.redirect('/');
 
-// Dohvati apartmane
+// Dohvati apartmane (uključi check_out_time za kreiranje zadatka čišćenja)
 const { data: apartmentsData } = await adminSupabase
   .from('apartments')
-  .select('id, name')
+  .select('id, name, check_out_time')
   .in('id', allApartmentIds)
   .eq('is_deleted', false);
 
 const allApartments = apartmentsData ?? [];
 const adminApartments = allApartments.filter((a) => adminApartmentIds.includes(a.id));
+const aptCheckOutTimeMap = new Map(allApartments.map((a) => [a.id, (a as any).check_out_time as string | null]));
 
 // URL parametri
 const tab = Astro.url.searchParams.get('tab') ?? 'sve';
@@ -97,6 +98,39 @@ const kpi = {
 // Dohvati nazive apartmana za prikaz
 const aptMap = new Map(allApartments.map((a) => [a.id, a.name]));
 
+// Dohvati dodjele čišćenja za prikazane rezervacije
+const reservationIds = reservations.map((r) => r.id);
+const { data: cleaningRows } = reservationIds.length > 0
+  ? await adminSupabase.from('reservation_cleaning').select('reservation_id, user_id').in('reservation_id', reservationIds)
+  : { data: [] };
+
+const cleaningUserIds = [...new Set((cleaningRows ?? []).map((c) => c.user_id))];
+const { data: cleaningProfiles } = cleaningUserIds.length > 0
+  ? await adminSupabase.from('profiles').select('id, full_name').in('id', cleaningUserIds)
+  : { data: [] };
+const cleaningProfileMap = new Map((cleaningProfiles ?? []).map((p) => [p.id, p.full_name]));
+// reservation_id -> { user_id, full_name }
+const cleaningMap = new Map(
+  (cleaningRows ?? []).map((c) => [c.reservation_id, { user_id: c.user_id, full_name: cleaningProfileMap.get(c.user_id) ?? '?' }])
+);
+
+// Dohvati korisnike po apartmanu za dropdown čišćenja
+const { data: allAptUsers } = await adminSupabase
+  .from('apartment_users')
+  .select('apartment_id, user_id')
+  .in('apartment_id', allApartmentIds.length > 0 ? allApartmentIds : ['none']);
+const aptUserIds = [...new Set((allAptUsers ?? []).map((u) => u.user_id))];
+const { data: aptUserProfiles } = aptUserIds.length > 0
+  ? await adminSupabase.from('profiles').select('id, full_name').in('id', aptUserIds)
+  : { data: [] };
+const aptUserProfileMap = new Map((aptUserProfiles ?? []).map((p) => [p.id, p.full_name]));
+// apartment_id -> [{ user_id, full_name }]
+const aptUsersForCleaningMap: Record<string, Array<{ user_id: string; full_name: string }>> = {};
+for (const au of (allAptUsers ?? [])) {
+  if (!aptUsersForCleaningMap[au.apartment_id]) aptUsersForCleaningMap[au.apartment_id] = [];
+  aptUsersForCleaningMap[au.apartment_id].push({ user_id: au.user_id, full_name: aptUserProfileMap.get(au.user_id) ?? '?' });
+}
+
 function formatDate(d: string): string {
   const [y, m, day] = d.split('-');
   return `${day}.${m}.${y}`;
@@ -105,6 +139,10 @@ function formatDate(d: string): string {
 function formatCurrency(n: number | null): string {
   if (n === null || n === undefined) return '—';
   return new Intl.NumberFormat('hr-HR', { style: 'currency', currency: 'EUR' }).format(n);
+}
+
+function calcNocenja(check_in: string, check_out: string): number {
+  return Math.round((new Date(check_out).getTime() - new Date(check_in).getTime()) / (1000 * 60 * 60 * 24));
 }
 
 const tabs = [
@@ -235,16 +273,18 @@ const tabs = [
               <th class="table-head px-4 py-3 text-left">Gost</th>
               <th class="table-head px-4 py-3 text-left">Status</th>
               <th class="table-head px-4 py-3 text-left">Apartman</th>
-              <th class="table-head px-4 py-3 text-left">Check-in</th>
+              <th class="table-head px-4 py-3 text-left whitespace-nowrap">Check-in</th>
               <th class="table-head px-4 py-3 text-left whitespace-nowrap">Check-out</th>
+              <th class="table-head px-4 py-3 text-center whitespace-nowrap">Noćenja</th>
               <th class="table-head px-4 py-3 text-left">Gosti</th>
               <th class="table-head px-4 py-3 text-left">Plaćanje</th>
               <th class="table-head px-4 py-3 text-right">Bruto</th>
               <th class="table-head px-4 py-3 text-right">Provizija</th>
               <th class="table-head px-4 py-3 text-right">Neto</th>
-              <th class="table-head px-4 py-3 text-center">Dok.</th>
+              <th class="table-head px-4 py-3 text-center whitespace-nowrap">Dokumenti</th>
               <th class="table-head px-4 py-3 text-center">Prijava</th>
               <th class="table-head px-4 py-3 text-center">Plaćeno</th>
+              <th class="table-head px-4 py-3 text-left whitespace-nowrap">Čišćenje</th>
               {isAdmin && <th class="table-head px-4 py-3"></th>}
             </tr>
           </thead>
@@ -252,6 +292,9 @@ const tabs = [
             {reservations.map((r) => {
               const neto = (r.amount_gross ?? 0) - (r.commission ?? 0);
               const computedStatus = getReservationStatus(r);
+              const nocenja = calcNocenja(r.check_in, r.check_out);
+              const cleaner = cleaningMap.get(r.id);
+              const aptUsers = aptUsersForCleaningMap[r.apartment_id] ?? [];
               return (
                 <tr class="table-row" id={`row-${r.id}`}>
                   <td class="table-cell font-medium text-gray-900 whitespace-nowrap">
@@ -270,6 +313,7 @@ const tabs = [
                   </td>
                   <td class="table-cell text-gray-700 whitespace-nowrap">{formatDate(r.check_in)}</td>
                   <td class="table-cell text-gray-700 whitespace-nowrap">{formatDate(r.check_out)}</td>
+                  <td class="table-cell text-center text-gray-700 font-medium">{nocenja}</td>
                   <td class="table-cell text-gray-500 text-center">{r.num_guests}</td>
                   <td class="table-cell text-gray-500">
                     {r.payment_type ? PAYMENT_TYPE_LABELS[r.payment_type] : '—'}
@@ -321,6 +365,28 @@ const tabs = [
                         <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
                       </svg>
                     </button>
+                  </td>
+                  <td class="table-cell">
+                    {aptUsers.length > 0 ? (
+                      <select
+                        class="input py-1 text-xs w-36"
+                        onchange={`assignCleaning('${r.id}', '${r.check_out}', this.value)`}
+                      >
+                        <option value="">— Odaberi —</option>
+                        {aptUsers.map((u) => (
+                          <option value={u.user_id} selected={cleaner?.user_id === u.user_id}>
+                            {u.full_name}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <span class="text-gray-400 text-xs">—</span>
+                    )}
+                    {cleaner && (
+                      <span class="mt-1 inline-flex items-center rounded-md bg-purple-50 px-2 py-0.5 text-xs font-medium text-purple-700 ring-1 ring-inset ring-purple-700/10">
+                        {cleaner.full_name}
+                      </span>
+                    )}
                   </td>
                   {isAdmin && (
                     <td class="table-cell">
@@ -531,7 +597,7 @@ const tabs = [
   <div id="toast" class="hidden fixed bottom-4 right-4 z-50 rounded-lg px-4 py-3 text-sm font-medium shadow-lg"></div>
 </AppLayout>
 
-<script>
+<script define:vars={{ aptCheckOutTimeMapData: Object.fromEntries(aptCheckOutTimeMap) }}>
   function closeModalOnOverlay(event: MouseEvent, id: string) {
     if (event.target === document.getElementById(id)) {
       document.getElementById(id)?.classList.add('hidden');
@@ -672,9 +738,28 @@ const tabs = [
     }
   }
 
+  async function assignCleaning(reservationId: string, checkOut: string, userId: string) {
+    try {
+      const res = await fetch('/api/rezervacije/assign-cleaning', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reservation_id: reservationId, user_id: userId || null, check_out: checkOut }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        showToast(userId ? 'Čistač dodijeljen, zadatak kreiran.' : 'Dodjela čišćenja uklonjena.');
+      } else {
+        showToast(data.error ?? 'Greška pri dodjeli čišćenja.', 'error');
+      }
+    } catch {
+      showToast('Greška pri slanju zahtjeva.', 'error');
+    }
+  }
+
   window.closeModalOnOverlay = closeModalOnOverlay;
   window.openAddModal = openAddModal;
   window.openEditModal = openEditModal;
   window.confirmCancel = confirmCancel;
   window.toggleField = toggleField;
+  window.assignCleaning = assignCleaning;
 </script>
