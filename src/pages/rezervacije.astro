@@ -181,6 +181,7 @@ const tabs = [
           {success === 'updated' && 'Rezervacija je uspješno ažurirana.'}
           {success === 'deleted' && 'Rezervacija je uspješno obrisana.'}
           {success === 'cancelled' && 'Rezervacija je otkazana.'}
+          {success === 'deleted' && 'Rezervacija je obrisana.'}
         </p>
       </div>
     )}
@@ -562,11 +563,20 @@ const tabs = [
                 <input id="edit-commission" name="commission" type="number" min="0" step="0.01" class="input" />
               </div>
             </div>
-            <div class="flex justify-end gap-3 pt-2">
-              <button type="button" onclick="document.getElementById('modal-edit').classList.add('hidden')" class="btn-secondary">
-                Odustani
+            <div class="flex items-center justify-between pt-2">
+              <button
+                type="button"
+                onclick="confirmDeleteRez(document.getElementById('edit-id').value, document.getElementById('edit-guest_name').value)"
+                class="btn-danger"
+              >
+                Obriši rezervaciju
               </button>
-              <button type="submit" id="edit-submit" class="btn-primary">Spremi promjene</button>
+              <div class="flex gap-3">
+                <button type="button" onclick="document.getElementById('modal-edit').classList.add('hidden')" class="btn-secondary">
+                  Odustani
+                </button>
+                <button type="submit" id="edit-submit" class="btn-primary">Spremi promjene</button>
+              </div>
             </div>
           </form>
         </div>
@@ -588,6 +598,24 @@ const tabs = [
               <button type="submit" class="btn-danger">Otkaži rezervaciju</button>
             </div>
           </form>
+        </div>
+      </div>
+
+      {/* Modal: Potvrda brisanja */}
+      <div id="modal-delete-rez" class="hidden modal-overlay" onclick="closeModalOnOverlay(event, 'modal-delete-rez')">
+        <div class="modal-content p-6" onclick="event.stopPropagation()">
+          <h2 class="text-lg font-semibold text-gray-900 mb-2">Obriši rezervaciju</h2>
+          <p class="text-gray-600 mb-1">
+            Jeste li sigurni da želite trajno obrisati rezervaciju za gosta <strong id="delete-rez-name"></strong>?
+          </p>
+          <p class="text-sm text-red-600 mb-6">Ova akcija se ne može poništiti.</p>
+          <input type="hidden" id="delete-rez-id" />
+          <div class="flex justify-end gap-3">
+            <button type="button" onclick="document.getElementById('modal-delete-rez').classList.add('hidden')" class="btn-secondary">
+              Odustani
+            </button>
+            <button type="button" onclick="doDeleteRez()" class="btn-danger">Obriši</button>
+          </div>
         </div>
       </div>
     </>
@@ -738,6 +766,37 @@ const tabs = [
     }
   }
 
+  function confirmDeleteRez(id: string, guestName: string) {
+    (document.getElementById('delete-rez-id') as HTMLInputElement).value = id;
+    (document.getElementById('delete-rez-name') as HTMLElement).textContent = guestName;
+    document.getElementById('modal-edit')?.classList.add('hidden');
+    document.getElementById('modal-delete-rez')?.classList.remove('hidden');
+  }
+
+  async function doDeleteRez() {
+    const id = (document.getElementById('delete-rez-id') as HTMLInputElement).value;
+    const btn = document.querySelector('#modal-delete-rez .btn-danger') as HTMLButtonElement;
+    if (btn) { btn.disabled = true; btn.textContent = 'Brisanje...'; }
+    try {
+      const res = await fetch('/api/rezervacije/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        window.location.href = '/rezervacije?success=deleted';
+      } else {
+        document.getElementById('modal-delete-rez')?.classList.add('hidden');
+        showToast(data.error ?? 'Greška pri brisanju.', 'error');
+      }
+    } catch {
+      showToast('Greška pri slanju zahtjeva.', 'error');
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = 'Obriši'; }
+    }
+  }
+
   async function assignCleaning(reservationId: string, checkOut: string, userId: string) {
     try {
       const res = await fetch('/api/rezervacije/assign-cleaning', {
@@ -762,4 +821,6 @@ const tabs = [
   window.confirmCancel = confirmCancel;
   window.toggleField = toggleField;
   window.assignCleaning = assignCleaning;
+  window.confirmDeleteRez = confirmDeleteRez;
+  window.doDeleteRez = doDeleteRez;
 </script>
