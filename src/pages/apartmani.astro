@@ -19,11 +19,12 @@ const apartments = apartmentUsers
   ?.map((au) => au.apartments)
   .filter((a) => a && !a.is_deleted) ?? [];
 
+const isAdmin = (apartmentUsers?.length ?? 0) > 0;
 const success = Astro.url.searchParams.get('success');
 const error = Astro.url.searchParams.get('error');
 ---
 
-<AppLayout title="Apartmani" user={profile} isAdmin={true} activeRoute="/apartmani">
+<AppLayout title="Apartmani" user={profile} isAdmin={isAdmin} activeRoute="/apartmani">
   <div class="p-6 max-w-7xl mx-auto">
     <!-- Header -->
     <div class="flex items-center justify-between mb-6">

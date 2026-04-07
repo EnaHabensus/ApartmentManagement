@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { createSupabaseServerClient } from '../../../lib/supabase';
+import { createSupabaseServerClient, createSupabaseAdminClient } from '../../../lib/supabase';
 
 export const POST: APIRoute = async ({ request, cookies, redirect }) => {
   const supabase = createSupabaseServerClient(request, cookies);
@@ -38,16 +38,17 @@ export const POST: APIRoute = async ({ request, cookies, redirect }) => {
     return redirect('/apartmani?error=Greška+pri+kreiranju+apartmana.');
   }
 
-  // Dodaj kreatora kao admina apartmana
-  await supabase.from('apartment_users').insert({
+  // Koristimo admin klijent jer user RLS nema INSERT politiku za apartment_users
+  const adminSupabase = createSupabaseAdminClient();
+
+  await adminSupabase.from('apartment_users').insert({
     apartment_id: apartment.id,
     user_id: user.id,
     role: 'admin',
     added_by: user.id,
   });
 
-  // Kreiraj defaultne postavke računa
-  await supabase.from('apartment_invoice_settings').insert({
+  await adminSupabase.from('apartment_invoice_settings').insert({
     apartment_id: apartment.id,
   });
 
