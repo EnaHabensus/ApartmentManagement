@@ -1,0 +1,285 @@
+---
+import AppLayout from '../layouts/AppLayout.astro';
+import { createSupabaseServerClient, createSupabaseAdminClient } from '../lib/supabase';
+
+const supabase = createSupabaseServerClient(Astro.request, Astro.cookies);
+const { data: { user } } = await supabase.auth.getUser();
+if (!user) return Astro.redirect('/login');
+
+const profile = Astro.locals.user!;
+const adminSupabase = createSupabaseAdminClient();
+
+// Samo admin
+const { data: myApartmentUsers } = await adminSupabase
+  .from('apartment_users')
+  .select('apartment_id, role')
+  .eq('user_id', user.id)
+  .eq('role', 'admin');
+
+const adminApartmentIds = (myApartmentUsers ?? []).map((au) => au.apartment_id);
+if (adminApartmentIds.length === 0) return Astro.redirect('/');
+
+const { data: apartmentsData } = await adminSupabase
+  .from('apartments')
+  .select('id, name, color')
+  .in('id', adminApartmentIds)
+  .eq('is_deleted', false);
+
+const allApartments = apartmentsData ?? [];
+const aptMap = new Map(allApartments.map((a) => [a.id, a.name]));
+const aptColorMap = new Map(allApartments.map((a) => [a.id, (a as any).color as string ?? '#3B82F6']));
+
+// URL parametri
+const period = Astro.url.searchParams.get('period') ?? 'all';
+const filterApartmentId = Astro.url.searchParams.get('apartment_id') ?? '';
+const dateFrom = Astro.url.searchParams.get('date_from') ?? '';
+const dateTo = Astro.url.searchParams.get('date_to') ?? '';
+
+// Izračunaj date range
+const today = new Date();
+today.setHours(0, 0, 0, 0);
+let qFrom: string | null = null;
+let qTo: string | null = null;
+
+if (period === 'this_month') {
+  qFrom = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split('T')[0];
+  qTo = new Date(today.getFullYear(), today.getMonth() + 1, 0).toISOString().split('T')[0];
+} else if (period === 'last_month') {
+  qFrom = new Date(today.getFullYear(), today.getMonth() - 1, 1).toISOString().split('T')[0];
+  qTo = new Date(today.getFullYear(), today.getMonth(), 0).toISOString().split('T')[0];
+} else if (period === 'custom') {
+  qFrom = dateFrom || null;
+  qTo = dateTo || null;
+}
+
+const aptIds = filterApartmentId ? [filterApartmentId] : adminApartmentIds;
+
+let rezQuery = adminSupabase
+  .from('reservations')
+  .select('id, guest_name, check_in, check_out, amount_gross, commission, is_paid, apartment_id')
+  .in('apartment_id', aptIds.length > 0 ? aptIds : ['none'])
+  .eq('status', 'active')
+  .order('check_in', { ascending: false });
+
+if (qFrom) rezQuery = rezQuery.gte('check_in', qFrom);
+if (qTo) rezQuery = rezQuery.lte('check_in', qTo);
+
+const { data: rezervacije } = await rezQuery;
+const rez = rezervacije ?? [];
+
+// KPI
+const bruto = rez.reduce((s, r) => s + (r.amount_gross ?? 0), 0);
+const provizija = rez.reduce((s, r) => s + (r.commission ?? 0), 0);
+const neto = rez.reduce((s, r) => s + ((r.amount_gross ?? 0) - (r.commission ?? 0)), 0);
+const zaprimljeno = rez.filter((r) => r.is_paid).reduce((s, r) => s + ((r.amount_gross ?? 0) - (r.commission ?? 0)), 0);
+
+function formatDate(d: string): string {
+  const [y, m, day] = d.split('-');
+  return `${day}.${m}.${y}`;
+}
+
+function formatEur(n: number): string {
+  return new Intl.NumberFormat('hr-HR', { style: 'currency', currency: 'EUR' }).format(n);
+}
+---
+
+<AppLayout title="Financije" user={profile} isAdmin={true} activeRoute="/financije">
+  <div class="p-6 max-w-7xl mx-auto">
+
+    <!-- Header -->
+    <div class="flex items-center justify-between mb-6">
+      <div>
+        <h1 class="text-2xl font-bold text-gray-900">Financije</h1>
+        <p class="text-gray-500 text-sm mt-1">{rez.length} rezervacij{rez.length === 1 ? 'a' : rez.length < 5 ? 'e' : 'a'}</p>
+      </div>
+    </div>
+
+    <!-- Filteri -->
+    <form method="GET" action="/financije" id="filter-form" class="card p-4 mb-6 flex flex-wrap items-end gap-4">
+      <div>
+        <label class="label">Period</label>
+        <select name="period" onchange="onPeriodChange(this.value)" class="input w-auto">
+          <option value="all" selected={period === 'all'}>Od početka</option>
+          <option value="this_month" selected={period === 'this_month'}>Ovaj mjesec</option>
+          <option value="last_month" selected={period === 'last_month'}>Prethodni mjesec</option>
+          <option value="custom" selected={period === 'custom'}>Po datumu</option>
+        </select>
+      </div>
+
+      <div id="custom-dates" class={`flex gap-3 ${period !== 'custom' ? 'hidden' : ''}`}>
+        <div>
+          <label class="label">Od</label>
+          <input name="date_from" type="date" value={dateFrom} class="input" />
+        </div>
+        <div>
+          <label class="label">Do</label>
+          <input name="date_to" type="date" value={dateTo} class="input" />
+        </div>
+      </div>
+
+      <div>
+        <label class="label">Apartman</label>
+        <select name="apartment_id" class="input w-auto">
+          <option value="">Svi apartmani</option>
+          {allApartments.map((apt) => (
+            <option value={apt.id} selected={filterApartmentId === apt.id}>{apt.name}</option>
+          ))}
+        </select>
+      </div>
+
+      <button type="submit" class="btn-primary">Primijeni</button>
+    </form>
+
+    <!-- KPI kartice -->
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <div class="card p-4">
+        <p class="text-xs font-medium text-gray-500 mb-1">Bruto (EUR)</p>
+        <p class="text-xl font-bold text-gray-900">{formatEur(bruto)}</p>
+      </div>
+      <div class="card p-4">
+        <p class="text-xs font-medium text-gray-500 mb-1">Neto (EUR)</p>
+        <p class="text-xl font-bold text-gray-900">{formatEur(neto)}</p>
+      </div>
+      <div class="card p-4">
+        <p class="text-xs font-medium text-gray-500 mb-1">Provizija (EUR)</p>
+        <p class="text-xl font-bold text-gray-900">{formatEur(provizija)}</p>
+      </div>
+      <div class="card p-4">
+        <p class="text-xs font-medium text-gray-500 mb-1">Zaprimljeno (EUR)</p>
+        <p class="text-xl font-bold text-green-600">{formatEur(zaprimljeno)}</p>
+      </div>
+    </div>
+
+    <!-- Tablica -->
+    {rez.length === 0 ? (
+      <div class="card p-12 text-center">
+        <p class="text-gray-400">Nema financijskih podataka za odabrani period.</p>
+      </div>
+    ) : (
+      <div class="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
+        <table class="text-sm" style="min-width: 800px; width: 100%;">
+          <thead>
+            <tr>
+              <th class="table-head px-4 py-3 text-left whitespace-nowrap">Gost</th>
+              <th class="table-head px-4 py-3 text-left">Apartman</th>
+              <th class="table-head px-4 py-3 text-left whitespace-nowrap">Check-in</th>
+              <th class="table-head px-4 py-3 text-left whitespace-nowrap">Check-out</th>
+              <th class="table-head px-4 py-3 text-right whitespace-nowrap">Bruto (EUR)</th>
+              <th class="table-head px-4 py-3 text-right whitespace-nowrap">Provizija (EUR)</th>
+              <th class="table-head px-4 py-3 text-right whitespace-nowrap">Neto (EUR)</th>
+              <th class="table-head px-4 py-3 text-center whitespace-nowrap">Isplata zaprimljena</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100">
+            {rez.map((r) => {
+              const n = (r.amount_gross ?? 0) - (r.commission ?? 0);
+              const color = aptColorMap.get(r.apartment_id) ?? '#3B82F6';
+              return (
+                <tr class="table-row" id={`row-${r.id}`}>
+                  <td class="table-cell px-4 py-3 font-medium text-gray-900 whitespace-nowrap">{r.guest_name}</td>
+                  <td class="table-cell px-4 py-3">
+                    <span
+                      class="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium whitespace-nowrap"
+                      style={`background-color: ${color}20; color: ${color}; box-shadow: inset 0 0 0 1px ${color}40`}
+                    >
+                      {aptMap.get(r.apartment_id) ?? '—'}
+                    </span>
+                  </td>
+                  <td class="table-cell px-4 py-3 text-gray-700 whitespace-nowrap">{formatDate(r.check_in)}</td>
+                  <td class="table-cell px-4 py-3 text-gray-700 whitespace-nowrap">{formatDate(r.check_out)}</td>
+                  <td class="table-cell px-4 py-3 text-right text-gray-700">{formatEur(r.amount_gross ?? 0)}</td>
+                  <td class="table-cell px-4 py-3 text-right text-gray-500">{formatEur(r.commission ?? 0)}</td>
+                  <td class="table-cell px-4 py-3 text-right font-semibold text-gray-900">{formatEur(n)}</td>
+                  <td class="table-cell px-4 py-3 text-center">
+                    <button
+                      onclick={`togglePaid('${r.id}', ${r.is_paid})`}
+                      class={`h-6 w-6 rounded-full border-2 flex items-center justify-center mx-auto transition-colors ${
+                        r.is_paid
+                          ? 'bg-green-500 border-green-500 text-white'
+                          : 'border-gray-300 text-transparent hover:border-gray-400'
+                      }`}
+                      title={r.is_paid ? 'Plaćeno' : 'Nije plaćeno'}
+                    >
+                      <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+                      </svg>
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+          <!-- Footer s ukupnim iznosima -->
+          <tfoot class="border-t-2 border-gray-200 bg-gray-50">
+            <tr>
+              <td class="px-4 py-3 text-sm font-semibold text-gray-700" colspan="4">Ukupno ({rez.length})</td>
+              <td class="px-4 py-3 text-right text-sm font-semibold text-gray-900">{formatEur(bruto)}</td>
+              <td class="px-4 py-3 text-right text-sm font-semibold text-gray-500">{formatEur(provizija)}</td>
+              <td class="px-4 py-3 text-right text-sm font-semibold text-gray-900">{formatEur(neto)}</td>
+              <td class="px-4 py-3 text-center text-sm font-semibold text-green-600">{formatEur(zaprimljeno)}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    )}
+  </div>
+
+  <div id="toast" class="hidden fixed bottom-4 right-4 z-50 rounded-lg px-4 py-3 text-sm font-medium shadow-lg"></div>
+</AppLayout>
+
+<script>
+  function onPeriodChange(val: string) {
+    const el = document.getElementById('custom-dates');
+    if (el) el.classList.toggle('hidden', val !== 'custom');
+  }
+
+  function showToast(message: string, type: 'success' | 'error' = 'success') {
+    const toast = document.getElementById('toast');
+    if (!toast) return;
+    toast.textContent = message;
+    toast.className = `fixed bottom-4 right-4 z-50 rounded-lg px-4 py-3 text-sm font-medium shadow-lg ${
+      type === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'
+    }`;
+    toast.classList.remove('hidden');
+    setTimeout(() => toast.classList.add('hidden'), 3000);
+  }
+
+  async function togglePaid(id: string, currentValue: boolean) {
+    try {
+      const res = await fetch('/api/rezervacije/toggle-field', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, field: 'is_paid', value: !currentValue }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        const row = document.getElementById(`row-${id}`);
+        if (row) {
+          const btn = row.querySelector('button[onclick^="togglePaid"]') as HTMLButtonElement;
+          if (btn) {
+            const newVal = !currentValue;
+            btn.setAttribute('onclick', `togglePaid('${id}', ${newVal})`);
+            btn.title = newVal ? 'Plaćeno' : 'Nije plaćeno';
+            if (newVal) {
+              btn.className = btn.className
+                .replace('border-gray-300 text-transparent hover:border-gray-400', '')
+                .trim() + ' bg-green-500 border-green-500 text-white';
+            } else {
+              btn.className = btn.className
+                .replace('bg-green-500 border-green-500 text-white', '')
+                .trim() + ' border-gray-300 text-transparent hover:border-gray-400';
+            }
+          }
+        }
+        showToast('Ažurirano.');
+      } else {
+        showToast(data.error ?? 'Greška pri ažuriranju.', 'error');
+      }
+    } catch {
+      showToast('Greška pri slanju zahtjeva.', 'error');
+    }
+  }
+
+  window.onPeriodChange = onPeriodChange;
+  window.togglePaid = togglePaid;
+</script>
