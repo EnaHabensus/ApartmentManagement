@@ -35,7 +35,7 @@ export const POST: APIRoute = async ({ request, cookies, redirect }) => {
     .single();
 
   if (error || !apartment) {
-    return redirect('/apartmani?error=' + encodeURIComponent('Greška pri kreiranju apartmana.'));
+    return redirect('/apartmani?error=' + encodeURIComponent('DB greška: ' + (error?.message ?? 'apartment null')));
   }
 
   // Koristimo admin klijent jer user RLS nema INSERT politiku za apartment_users
