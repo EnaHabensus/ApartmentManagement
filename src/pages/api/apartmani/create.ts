@@ -41,12 +41,17 @@ export const POST: APIRoute = async ({ request, cookies, redirect }) => {
     return redirect('/apartmani?error=' + encodeURIComponent('DB greška: ' + (error?.message ?? 'apartment null')));
   }
 
-  await adminSupabase.from('apartment_users').insert({
+  const { error: auError } = await adminSupabase.from('apartment_users').insert({
     apartment_id: apartment.id,
     user_id: user.id,
     role: 'admin',
     added_by: user.id,
   });
+
+  if (auError) {
+    console.error('apartment_users insert error:', auError.message);
+    return redirect('/apartmani?error=' + encodeURIComponent('Greška pri dodjeli admin uloge: ' + auError.message));
+  }
 
   await adminSupabase.from('apartment_invoice_settings').insert({
     apartment_id: apartment.id,

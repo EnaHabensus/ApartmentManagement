@@ -50,7 +50,12 @@ const usersMap = new Map<string, {
 }>();
 
 for (const au of (apartmentUsers ?? []) as ApartmentUserWithProfile[]) {
-  if (!au.profiles) continue;
+  // profiles može biti null ako trigger nije kreirao profil — prikaži placeholder
+  const profileData = au.profiles as any;
+  const full_name = profileData?.full_name ?? 'Nepoznat korisnik';
+  const email = profileData?.email ?? '';
+  const has_logged_in = profileData?.has_logged_in ?? false;
+
   const existing = usersMap.get(au.user_id);
   const aptEntry = {
     apartment_id: au.apartment_id,
@@ -62,9 +67,9 @@ for (const au of (apartmentUsers ?? []) as ApartmentUserWithProfile[]) {
   } else {
     usersMap.set(au.user_id, {
       user_id: au.user_id,
-      full_name: au.profiles.full_name,
-      email: au.profiles.email,
-      has_logged_in: au.profiles.has_logged_in,
+      full_name,
+      email,
+      has_logged_in,
       apartments: [aptEntry],
     });
   }

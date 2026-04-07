@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { createSupabaseServerClient } from '../../../lib/supabase';
+import { createSupabaseServerClient, createSupabaseAdminClient } from '../../../lib/supabase';
 
 export const GET: APIRoute = async ({ request, cookies }) => {
   const supabase = createSupabaseServerClient(request, cookies);
@@ -22,17 +22,26 @@ export const GET: APIRoute = async ({ request, cookies }) => {
     });
   }
 
-  // Dohvati sve korisnike apartmana s profiles joinom
-  const { data, error } = await supabase
+  // Provjeri da korisnik ima pristup ovom apartmanu
+  const { data: access } = await supabase
     .from('apartment_users')
-    .select(`
-      user_id,
-      profiles!inner (
-        id,
-        full_name,
-        email
-      )
-    `)
+    .select('role')
+    .eq('apartment_id', apartment_id)
+    .eq('user_id', user.id)
+    .single();
+
+  if (!access) {
+    return new Response(JSON.stringify({ error: 'Nemate pristup ovom apartmanu.' }), {
+      status: 403,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  // Admin klijent za dohvat SVIH korisnika apartmana (uključujući admina)
+  const adminSupabase = createSupabaseAdminClient();
+  const { data, error } = await adminSupabase
+    .from('apartment_users')
+    .select('user_id, role, profiles(id, full_name, email)')
     .eq('apartment_id', apartment_id);
 
   if (error) {
@@ -43,15 +52,12 @@ export const GET: APIRoute = async ({ request, cookies }) => {
   }
 
   const users = (data ?? []).map((row) => {
-    const profile = row.profiles as unknown as {
-      id: string;
-      full_name: string;
-      email: string;
-    };
+    const profile = row.profiles as unknown as { id: string; full_name: string; email: string } | null;
     return {
-      id: profile.id,
-      full_name: profile.full_name,
-      email: profile.email,
+      id: row.user_id,
+      full_name: profile?.full_name ?? 'Nepoznat',
+      email: profile?.email ?? '',
+      role: row.role,
     };
   });
 
