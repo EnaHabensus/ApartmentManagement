@@ -9,34 +9,41 @@ if (!user) return Astro.redirect('/login');
 
 const profile = Astro.locals.user!;
 
-// Dohvati apartmane gdje je prijavljeni korisnik admin (samo vlastite zapise — nema rekurzije)
-const { data: myApartmentUsers } = await supabase
+// Koristimo admin klijent za sve upite — izbjegavamo RLS probleme
+const adminSupabase = createSupabaseAdminClient();
+
+// Dohvati apartment_ids gdje je korisnik admin (bez joins — jednostavno i pouzdano)
+const { data: myAdminRows } = await adminSupabase
   .from('apartment_users')
-  .select('apartment_id, apartments(id, name)')
+  .select('apartment_id')
   .eq('user_id', user.id)
   .eq('role', 'admin');
 
-const adminApartments = myApartmentUsers
-  ?.map((au) => au.apartments)
-  .filter((a): a is { id: string; name: string } => !!a) ?? [];
-
-const adminApartmentIds = adminApartments.map((a) => a.id);
+const adminApartmentIds = (myAdminRows ?? []).map((r) => r.apartment_id);
 
 if (adminApartmentIds.length === 0) {
   return Astro.redirect('/');
 }
 
+// Dohvati nazive apartmana zasebno
+const { data: adminApartmentData } = await adminSupabase
+  .from('apartments')
+  .select('id, name')
+  .in('id', adminApartmentIds)
+  .eq('is_deleted', false);
+
+const adminApartments = adminApartmentData ?? [];
+
 // Filter po apartmanu
 const filterApartmentId = Astro.url.searchParams.get('apartment_id') ?? '';
 
-// Koristimo admin klijent za dohvat svih korisnika (izbjegavamo RLS rekurziju)
-const adminSupabase = createSupabaseAdminClient();
+// Dohvati sve korisnike na adminovim apartmanima
 const query = adminSupabase
   .from('apartment_users')
   .select('*, profiles(*), apartments(name)')
   .in('apartment_id', adminApartmentIds);
 
-const { data: apartmentUsers } = filterApartmentId
+const { data: apartmentUsers, error: auError } = filterApartmentId
   ? await query.eq('apartment_id', filterApartmentId)
   : await query;
 

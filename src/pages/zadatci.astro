@@ -1,6 +1,6 @@
 ---
 import AppLayout from '../layouts/AppLayout.astro';
-import { createSupabaseServerClient } from '../lib/supabase';
+import { createSupabaseServerClient, createSupabaseAdminClient } from '../lib/supabase';
 import type { TaskWithDetails, Apartment } from '../lib/types';
 
 const supabase = createSupabaseServerClient(Astro.request, Astro.cookies);
@@ -8,28 +8,27 @@ const { data: { user } } = await supabase.auth.getUser();
 if (!user) return Astro.redirect('/login');
 
 const profile = Astro.locals.user!;
+const adminSupabase = createSupabaseAdminClient();
 
-// Dohvati ulogu korisnika (admin ako ima barem jedan apartman s admin ulogom)
-const { data: myApartmentUsers } = await supabase
+// Dohvati uloge korisnika — admin klijent, bez joins da izbjegnemo RLS probleme
+const { data: myApartmentUsers } = await adminSupabase
   .from('apartment_users')
-  .select('apartment_id, role, apartments(id, name)')
+  .select('apartment_id, role')
   .eq('user_id', user.id);
 
 const isAdmin = (myApartmentUsers ?? []).some((au) => au.role === 'admin');
+const adminApartmentIds = (myApartmentUsers ?? []).filter((au) => au.role === 'admin').map((au) => au.apartment_id);
+const allApartmentIds = (myApartmentUsers ?? []).map((au) => au.apartment_id);
 
-// Apartmani dostupni ovom korisniku
-const allUserApartments = (myApartmentUsers ?? [])
-  .map((au) => au.apartments)
-  .filter((a): a is { id: string; name: string } => !!a && !('is_deleted' in a && (a as any).is_deleted));
+// Dohvati nazive apartmana zasebno
+const { data: apartmentsData } = await adminSupabase
+  .from('apartments')
+  .select('id, name')
+  .in('id', allApartmentIds.length > 0 ? allApartmentIds : ['none'])
+  .eq('is_deleted', false);
 
-// Za admina: samo apartmani gdje je admin
-const adminApartments = (myApartmentUsers ?? [])
-  .filter((au) => au.role === 'admin')
-  .map((au) => au.apartments)
-  .filter((a): a is { id: string; name: string } => !!a);
-
-const adminApartmentIds = adminApartments.map((a) => a.id);
-const allApartmentIds = allUserApartments.map((a) => a.id);
+const adminApartments = (apartmentsData ?? []).filter((a) => adminApartmentIds.includes(a.id));
+const allUserApartments = apartmentsData ?? [];
 
 // URL parametri za filtriranje
 const filterApartmentId = Astro.url.searchParams.get('apartment_id') ?? '';
