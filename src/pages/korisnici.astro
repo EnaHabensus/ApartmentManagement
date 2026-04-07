@@ -13,11 +13,15 @@ const profile = Astro.locals.user!;
 const adminSupabase = createSupabaseAdminClient();
 
 // Dohvati apartment_ids gdje je korisnik admin (bez joins — jednostavno i pouzdano)
-const { data: myAdminRows } = await adminSupabase
+const { data: myAdminRows, error: adminRowsError } = await adminSupabase
   .from('apartment_users')
   .select('apartment_id')
   .eq('user_id', user.id)
   .eq('role', 'admin');
+
+console.log('DEBUG user.id:', user.id);
+console.log('DEBUG myAdminRows:', JSON.stringify(myAdminRows));
+console.log('DEBUG adminRowsError:', adminRowsError?.message);
 
 const adminApartmentIds = (myAdminRows ?? []).map((r) => r.apartment_id);
 
@@ -43,9 +47,12 @@ const auQuery = adminSupabase
   .select('id, apartment_id, user_id, role, added_at')
   .in('apartment_id', adminApartmentIds);
 
-const { data: apartmentUsers } = filterApartmentId
+const { data: apartmentUsers, error: auQueryError } = filterApartmentId
   ? await auQuery.eq('apartment_id', filterApartmentId)
   : await auQuery;
+
+console.log('DEBUG apartmentUsers:', JSON.stringify(apartmentUsers));
+console.log('DEBUG auQueryError:', auQueryError?.message);
 
 // Dohvati profile zasebno za sve user_ids
 const userIds = [...new Set((apartmentUsers ?? []).map((au) => au.user_id))];
