@@ -1,0 +1,232 @@
+---
+import AppLayout from '../layouts/AppLayout.astro';
+import { createSupabaseServerClient } from '../lib/supabase';
+
+const supabase = createSupabaseServerClient(Astro.request, Astro.cookies);
+const { data: { user } } = await supabase.auth.getUser();
+if (!user) return Astro.redirect('/login');
+
+const profile = Astro.locals.user!;
+
+// Provjeri ima li admin ulogu
+const { data: adminApts } = await supabase
+  .from('apartment_users')
+  .select('apartment_id, apartments(id, name, is_deleted)')
+  .eq('user_id', user.id)
+  .eq('role', 'admin');
+
+const apartments = adminApts
+  ?.filter((au) => au.apartments && !au.apartments.is_deleted)
+  .map((au) => au.apartments) ?? [];
+
+// Ako nema admin ulogu → preusmjeri na zadatci (staff)
+if (apartments.length === 0) {
+  const { data: staffCheck } = await supabase
+    .from('apartment_users')
+    .select('id')
+    .eq('user_id', user.id)
+    .eq('role', 'staff')
+    .limit(1);
+
+  if (staffCheck && staffCheck.length > 0) {
+    return Astro.redirect('/zadatci');
+  }
+}
+
+const period = Astro.url.searchParams.get('period') || 'all';
+const aptFilter = Astro.url.searchParams.get('apartment') || 'all';
+
+const apartmentIds = apartments.map((a) => a.id);
+const filteredAptIds = aptFilter === 'all' ? apartmentIds : [aptFilter];
+
+// Izračunaj datum range za period filter
+const today = new Date();
+today.setHours(0, 0, 0, 0);
+let dateFrom: string | null = null;
+let dateTo: string | null = null;
+
+if (period === 'this_month') {
+  dateFrom = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split('T')[0];
+  dateTo = new Date(today.getFullYear(), today.getMonth() + 1, 0).toISOString().split('T')[0];
+} else if (period === 'last_month') {
+  dateFrom = new Date(today.getFullYear(), today.getMonth() - 1, 1).toISOString().split('T')[0];
+  dateTo = new Date(today.getFullYear(), today.getMonth(), 0).toISOString().split('T')[0];
+}
+
+// Dohvati rezervacije za KPI
+let query = supabase
+  .from('reservations')
+  .select('*')
+  .in('apartment_id', filteredAptIds.length ? filteredAptIds : ['none'])
+  .eq('status', 'active');
+
+if (dateFrom) query = query.gte('check_in', dateFrom);
+if (dateTo) query = query.lte('check_in', dateTo);
+
+const { data: reservations } = await query;
+
+// KPI izračuni
+const todayStr = today.toISOString().split('T')[0];
+const activeRez = reservations ?? [];
+const bruttoSum = activeRez.reduce((s, r) => s + (r.amount_gross ?? 0), 0);
+const nettoSum = activeRez.reduce((s, r) => s + ((r.amount_gross ?? 0) - (r.commission ?? 0)), 0);
+const commissionSum = activeRez.reduce((s, r) => s + (r.commission ?? 0), 0);
+const completedCount = activeRez.filter((r) => r.check_out <= todayStr).length;
+
+// Popunjenost
+let totalDays = 1;
+let reservedDays = 0;
+if (dateFrom && dateTo) {
+  const from = new Date(dateFrom);
+  const to = new Date(dateTo);
+  totalDays = Math.max(1, (to.getTime() - from.getTime()) / 86400000 * (filteredAptIds.length || 1));
+  reservedDays = activeRez.reduce((s, r) => {
+    const ci = new Date(r.check_in);
+    const co = new Date(r.check_out);
+    return s + (co.getTime() - ci.getTime()) / 86400000;
+  }, 0);
+} else {
+  totalDays = 365 * (filteredAptIds.length || 1);
+  reservedDays = activeRez.reduce((s, r) => {
+    const ci = new Date(r.check_in);
+    const co = new Date(r.check_out);
+    return s + (co.getTime() - ci.getTime()) / 86400000;
+  }, 0);
+}
+const occupancy = Math.min(100, Math.round((reservedDays / totalDays) * 100));
+
+// Nadolazeće rezervacije (sljedećih 5 dana)
+const in5Days = new Date(today);
+in5Days.setDate(in5Days.getDate() + 5);
+const in5DaysStr = in5Days.toISOString().split('T')[0];
+
+const { data: upcoming } = await supabase
+  .from('reservations')
+  .select('*, apartments(name)')
+  .in('apartment_id', filteredAptIds.length ? filteredAptIds : ['none'])
+  .eq('status', 'active')
+  .gte('check_in', todayStr)
+  .lte('check_in', in5DaysStr)
+  .order('check_in');
+
+function formatDate(d: string) {
+  const [y, m, day] = d.split('-');
+  return `${day}.${m}.${y}`;
+}
+
+function nights(ci: string, co: string) {
+  return Math.round((new Date(co).getTime() - new Date(ci).getTime()) / 86400000);
+}
+
+function getStatus(r: { check_in: string; check_out: string }) {
+  if (r.check_in > todayStr) return { label: 'Nadolazeća', cls: 'badge-blue' };
+  if (r.check_out <= todayStr) return { label: 'Završena', cls: 'badge-gray' };
+  return { label: 'U toku', cls: 'badge-green' };
+}
+---
+
+<AppLayout title="Dashboard" user={profile} isAdmin={true} activeRoute="/">
+  <div class="p-6 max-w-7xl mx-auto">
+    <!-- Header -->
+    <div class="flex flex-wrap items-center justify-between gap-4 mb-6">
+      <div>
+        <h1 class="text-2xl font-bold text-gray-900">Dashboard</h1>
+        <p class="text-gray-500 text-sm mt-1">Pregled poslovanja</p>
+      </div>
+
+      <div class="flex items-center gap-3">
+        <!-- Filter apartmana -->
+        {apartments.length > 1 && (
+          <form method="GET" id="form-apt">
+            <select
+              name="apartment"
+              onchange="document.getElementById('form-apt').submit()"
+              class="input w-auto"
+            >
+              <option value="all" selected={aptFilter === 'all'}>Svi apartmani</option>
+              {apartments.map((a) => (
+                <option value={a.id} selected={aptFilter === a.id}>{a.name}</option>
+              ))}
+            </select>
+            <input type="hidden" name="period" value={period} />
+          </form>
+        )}
+
+        <!-- Filter perioda -->
+        <form method="GET" id="form-period">
+          <select
+            name="period"
+            onchange="document.getElementById('form-period').submit()"
+            class="input w-auto"
+          >
+            <option value="all" selected={period === 'all'}>Od početka</option>
+            <option value="this_month" selected={period === 'this_month'}>Ovaj mjesec</option>
+            <option value="last_month" selected={period === 'last_month'}>Prošli mjesec</option>
+          </select>
+          <input type="hidden" name="apartment" value={aptFilter} />
+        </form>
+      </div>
+    </div>
+
+    <!-- KPI kartice -->
+    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
+      {[
+        { label: 'Bruto zarada', value: `€ ${bruttoSum.toFixed(2)}` },
+        { label: 'Neto zarada', value: `€ ${nettoSum.toFixed(2)}` },
+        { label: 'Provizija', value: `€ ${commissionSum.toFixed(2)}` },
+        { label: 'Popunjenost', value: `${occupancy}%` },
+        { label: 'Ukupno rezervacija', value: String(activeRez.length) },
+        { label: 'Završene smjene', value: String(completedCount) },
+      ].map(({ label, value }) => (
+        <div class="card p-4">
+          <p class="text-xs font-medium text-gray-500 mb-1">{label}</p>
+          <p class="text-xl font-bold text-gray-900">{value}</p>
+        </div>
+      ))}
+    </div>
+
+    <!-- Nadolazeće rezervacije -->
+    <div class="card">
+      <div class="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+        <h2 class="font-semibold text-gray-900">Nadolazeće rezervacije</h2>
+        <a href="/rezervacije" class="text-sm text-blue-600 hover:text-blue-700 font-medium">
+          Vidi sve →
+        </a>
+      </div>
+
+      {!upcoming?.length ? (
+        <div class="p-8 text-center text-gray-400 text-sm">Nema nadolazećih rezervacija u sljedećih 5 dana.</div>
+      ) : (
+        <div class="overflow-x-auto">
+          <table class="w-full">
+            <thead>
+              <tr class="table-head">
+                <th class="table-cell">Ime i prezime gosta</th>
+                <th class="table-cell">Check-in</th>
+                <th class="table-cell">Noćenja</th>
+                <th class="table-cell">Br. gostiju</th>
+                <th class="table-cell">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {upcoming.map((r) => {
+                const s = getStatus(r);
+                return (
+                  <tr class="table-row">
+                    <td class="table-cell font-medium">{r.guest_name}</td>
+                    <td class="table-cell">{formatDate(r.check_in)}</td>
+                    <td class="table-cell">{nights(r.check_in, r.check_out)}</td>
+                    <td class="table-cell">{r.num_guests}</td>
+                    <td class="table-cell">
+                      <span class={`badge ${s.cls}`}>{s.label}</span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  </div>
+</AppLayout>

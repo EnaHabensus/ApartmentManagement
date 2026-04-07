@@ -1,0 +1,105 @@
+---
+import '../styles/global.css';
+const error = Astro.url.searchParams.get('error');
+---
+
+<!DOCTYPE html>
+<html lang="hr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Registracija — ApartMan</title>
+  </head>
+  <body class="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+    <div class="w-full max-w-md">
+      <!-- Logo -->
+      <div class="text-center mb-8">
+        <div class="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-blue-600 mb-4">
+          <span class="text-white font-bold text-xl">A</span>
+        </div>
+        <h1 class="text-2xl font-bold text-gray-900">ApartMan</h1>
+        <p class="text-gray-500 mt-1">Kreirajte novi račun</p>
+      </div>
+
+      <div class="card p-8">
+        {error && (
+          <div class="mb-4 rounded-lg bg-red-50 border border-red-200 p-3">
+            <p class="text-sm text-red-600">
+              {error === 'password_mismatch' && 'Lozinke se ne podudaraju.'}
+              {error === 'email_taken' && 'Ovaj email je već u upotrebi.'}
+              {error === 'weak_password' && 'Lozinka mora imati najmanje 8 znakova.'}
+              {error === 'server_error' && 'Došlo je do greške. Pokušajte ponovno.'}
+              {!['password_mismatch','email_taken','weak_password','server_error'].includes(error) && error}
+            </p>
+          </div>
+        )}
+
+        <form action="/api/auth/register" method="POST" class="space-y-5">
+          <div>
+            <label for="full_name" class="label">Ime i prezime</label>
+            <input
+              id="full_name"
+              name="full_name"
+              type="text"
+              autocomplete="name"
+              required
+              class="input"
+              placeholder="Ivan Horvat"
+            />
+          </div>
+
+          <div>
+            <label for="email" class="label">Email adresa</label>
+            <input
+              id="email"
+              name="email"
+              type="email"
+              autocomplete="email"
+              required
+              class="input"
+              placeholder="vas@email.com"
+            />
+          </div>
+
+          <div>
+            <label for="password" class="label">Lozinka</label>
+            <input
+              id="password"
+              name="password"
+              type="password"
+              autocomplete="new-password"
+              required
+              minlength="8"
+              class="input"
+              placeholder="Najmanje 8 znakova"
+            />
+          </div>
+
+          <div>
+            <label for="password_confirm" class="label">Potvrda lozinke</label>
+            <input
+              id="password_confirm"
+              name="password_confirm"
+              type="password"
+              autocomplete="new-password"
+              required
+              class="input"
+              placeholder="Ponovite lozinku"
+            />
+          </div>
+
+          <button type="submit" class="btn-primary w-full">
+            Kreiraj račun
+          </button>
+        </form>
+
+        <p class="mt-6 text-center text-sm text-gray-500">
+          Već imate račun?{' '}
+          <a href="/login" class="text-blue-600 font-medium hover:text-blue-700">
+            Prijavite se
+          </a>
+        </p>
+      </div>
+    </div>
+  </body>
+</html>

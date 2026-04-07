@@ -1,0 +1,625 @@
+---
+import AppLayout from '../layouts/AppLayout.astro';
+import { createSupabaseServerClient } from '../lib/supabase';
+import type { TaskWithDetails, Apartment } from '../lib/types';
+
+const supabase = createSupabaseServerClient(Astro.request, Astro.cookies);
+const { data: { user } } = await supabase.auth.getUser();
+if (!user) return Astro.redirect('/login');
+
+const profile = Astro.locals.user!;
+
+// Dohvati ulogu korisnika (admin ako ima barem jedan apartman s admin ulogom)
+const { data: myApartmentUsers } = await supabase
+  .from('apartment_users')
+  .select('apartment_id, role, apartments(id, name)')
+  .eq('user_id', user.id);
+
+const isAdmin = (myApartmentUsers ?? []).some((au) => au.role === 'admin');
+
+// Apartmani dostupni ovom korisniku
+const allUserApartments = (myApartmentUsers ?? [])
+  .map((au) => au.apartments)
+  .filter((a): a is { id: string; name: string } => !!a && !('is_deleted' in a && (a as any).is_deleted));
+
+// Za admina: samo apartmani gdje je admin
+const adminApartments = (myApartmentUsers ?? [])
+  .filter((au) => au.role === 'admin')
+  .map((au) => au.apartments)
+  .filter((a): a is { id: string; name: string } => !!a);
+
+const adminApartmentIds = adminApartments.map((a) => a.id);
+const allApartmentIds = allUserApartments.map((a) => a.id);
+
+// URL parametri za filtriranje
+const filterApartmentId = Astro.url.searchParams.get('apartment_id') ?? '';
+const filterStatus = Astro.url.searchParams.get('status') ?? 'active'; // active | completed | all
+const success = Astro.url.searchParams.get('success');
+const error = Astro.url.searchParams.get('error');
+
+// Dohvati zadatke
+let tasks: TaskWithDetails[] = [];
+
+if (allApartmentIds.length > 0) {
+  let query = supabase
+    .from('tasks')
+    .select(`
+      *,
+      apartments(name),
+      task_assignees(
+        user_id,
+        profiles(full_name, email)
+      )
+    `)
+    .order('due_date', { ascending: true })
+    .order('due_time', { ascending: true });
+
+  if (isAdmin) {
+    // Admin vidi sve zadatke za svoje apartmane
+    const aptIds = filterApartmentId ? [filterApartmentId] : adminApartmentIds;
+    query = query.in('apartment_id', aptIds);
+  } else {
+    // Staff vidi samo zadatke gdje je assignee
+    const { data: assignedTaskIds } = await supabase
+      .from('task_assignees')
+      .select('task_id')
+      .eq('user_id', user.id);
+
+    const taskIds = (assignedTaskIds ?? []).map((a) => a.task_id);
+    if (taskIds.length === 0) {
+      tasks = [];
+    } else {
+      const aptIds = filterApartmentId ? [filterApartmentId] : allApartmentIds;
+      query = query.in('id', taskIds).in('apartment_id', aptIds);
+    }
+  }
+
+  if (filterStatus === 'active') {
+    query = query.eq('is_completed', false);
+  } else if (filterStatus === 'completed') {
+    query = query.eq('is_completed', true);
+  }
+
+  const { data } = await query;
+  tasks = (data ?? []) as TaskWithDetails[];
+}
+
+// Dohvati korisnike po apartmanu za multiselect u formi (samo admin)
+// Struktura: { [apartment_id]: Array<{ user_id, full_name, email }> }
+const apartmentUsersMap: Record<string, Array<{ user_id: string; full_name: string; email: string }>> = {};
+
+if (isAdmin && adminApartmentIds.length > 0) {
+  const { data: aptUsers } = await supabase
+    .from('apartment_users')
+    .select('apartment_id, user_id, profiles(full_name, email)')
+    .in('apartment_id', adminApartmentIds);
+
+  for (const au of (aptUsers ?? [])) {
+    if (!au.profiles) continue;
+    if (!apartmentUsersMap[au.apartment_id]) {
+      apartmentUsersMap[au.apartment_id] = [];
+    }
+    apartmentUsersMap[au.apartment_id].push({
+      user_id: au.user_id,
+      full_name: (au.profiles as any).full_name,
+      email: (au.profiles as any).email,
+    });
+  }
+}
+
+function formatDateTime(date: string, time: string | null): string {
+  const [y, m, d] = date.split('-');
+  const datePart = `${d}.${m}.${y}`;
+  if (!time) return datePart;
+  return `${datePart} ${time.slice(0, 5)}`;
+}
+
+function getInitials(name: string): string {
+  return name
+    .split(' ')
+    .slice(0, 2)
+    .map((n) => n[0]?.toUpperCase() ?? '')
+    .join('');
+}
+---
+
+<AppLayout title="Zadatci" user={profile} isAdmin={isAdmin} activeRoute="/zadatci">
+  <div class="p-6 max-w-7xl mx-auto">
+
+    <!-- Header -->
+    <div class="flex items-center justify-between mb-6">
+      <div>
+        <h1 class="text-2xl font-bold text-gray-900">Zadatci</h1>
+        <p class="text-gray-500 text-sm mt-1">{tasks.length} zadatak{tasks.length === 1 ? '' : tasks.length < 5 ? 'a' : 'a'}</p>
+      </div>
+      {isAdmin && (
+        <button
+          onclick="document.getElementById('modal-add').classList.remove('hidden'); initAddModal();"
+          class="btn-primary"
+        >
+          + Dodaj zadatak
+        </button>
+      )}
+    </div>
+
+    <!-- Obavijesti -->
+    {success && (
+      <div class="mb-4 rounded-lg bg-green-50 border border-green-200 p-3">
+        <p class="text-sm text-green-700">
+          {success === 'created' && 'Zadatak je uspješno kreiran.'}
+          {success === 'updated' && 'Zadatak je uspješno ažuriran.'}
+          {success === 'deleted' && 'Zadatak je uspješno obrisan.'}
+        </p>
+      </div>
+    )}
+    {error && (
+      <div class="mb-4 rounded-lg bg-red-50 border border-red-200 p-3">
+        <p class="text-sm text-red-600">{error}</p>
+      </div>
+    )}
+
+    <!-- Filteri -->
+    <div class="mb-4 flex flex-wrap items-center gap-3">
+      <form method="GET" action="/zadatci" class="flex flex-wrap gap-3" id="filter-form">
+        <select
+          name="apartment_id"
+          onchange="document.getElementById('filter-form').submit()"
+          class="input py-1.5 text-sm w-auto"
+        >
+          <option value="">Svi apartmani</option>
+          {(isAdmin ? adminApartments : allUserApartments).map((apt) => (
+            <option value={apt.id} selected={filterApartmentId === apt.id}>
+              {apt.name}
+            </option>
+          ))}
+        </select>
+        <select
+          name="status"
+          onchange="document.getElementById('filter-form').submit()"
+          class="input py-1.5 text-sm w-auto"
+        >
+          <option value="active" selected={filterStatus === 'active'}>Aktivni</option>
+          <option value="completed" selected={filterStatus === 'completed'}>Završeni</option>
+          <option value="all" selected={filterStatus === 'all'}>Svi</option>
+        </select>
+        {filterApartmentId && <input type="hidden" name="apartment_id" value={filterApartmentId} />}
+      </form>
+    </div>
+
+    <!-- Tablica -->
+    {tasks.length === 0 ? (
+      <div class="card p-12 text-center">
+        <div class="text-gray-400 mb-4">
+          <svg class="mx-auto h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+              d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+          </svg>
+        </div>
+        <h3 class="text-lg font-medium text-gray-900 mb-2">Nema zadataka</h3>
+        <p class="text-gray-500">
+          {filterStatus === 'active' ? 'Nema aktivnih zadataka.' : filterStatus === 'completed' ? 'Nema završenih zadataka.' : 'Nema zadataka.'}
+        </p>
+      </div>
+    ) : (
+      <div class="table-wrapper">
+        <table class="w-full text-sm">
+          <thead>
+            <tr>
+              <th class="table-head px-4 py-3">Naziv</th>
+              <th class="table-head px-4 py-3">Apartman</th>
+              <th class="table-head px-4 py-3">Datum i vrijeme</th>
+              <th class="table-head px-4 py-3">Dodijeljeno</th>
+              <th class="table-head px-4 py-3">Status</th>
+              <th class="table-head px-4 py-3">Akcije</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100">
+            {tasks.map((task) => (
+              <tr class={`table-row ${task.is_completed ? 'opacity-60' : ''}`} id={`row-${task.id}`}>
+                <td class="table-cell font-medium text-gray-900">
+                  <span class={task.is_completed ? 'line-through text-gray-400' : ''}>
+                    {task.title}
+                  </span>
+                </td>
+                <td class="table-cell text-gray-500">{(task.apartments as any)?.name ?? '—'}</td>
+                <td class="table-cell text-gray-500 whitespace-nowrap">
+                  {formatDateTime(task.due_date, task.due_time)}
+                </td>
+                <td class="table-cell">
+                  {task.task_assignees && task.task_assignees.length > 0 ? (
+                    <div class="flex -space-x-1">
+                      {task.task_assignees.slice(0, 4).map((a) => (
+                        <div
+                          class="h-7 w-7 rounded-full bg-blue-100 border-2 border-white flex items-center justify-center"
+                          title={(a.profiles as any)?.full_name ?? ''}
+                        >
+                          <span class="text-blue-700 text-xs font-semibold">
+                            {getInitials((a.profiles as any)?.full_name ?? '?')}
+                          </span>
+                        </div>
+                      ))}
+                      {task.task_assignees.length > 4 && (
+                        <div class="h-7 w-7 rounded-full bg-gray-100 border-2 border-white flex items-center justify-center">
+                          <span class="text-gray-600 text-xs font-semibold">+{task.task_assignees.length - 4}</span>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <span class="text-gray-400">—</span>
+                  )}
+                </td>
+                <td class="table-cell">
+                  {task.is_completed ? (
+                    <span class="badge badge-green">Završen</span>
+                  ) : (
+                    <span class="badge badge-blue">Aktivan</span>
+                  )}
+                </td>
+                <td class="table-cell">
+                  <div class="flex items-center gap-1">
+                    {/* Završi checkbox – admin i staff */}
+                    {!task.is_completed && (
+                      <button
+                        onclick={`completeTask('${task.id}')`}
+                        class="btn-ghost text-xs px-2 py-1 text-green-700 hover:bg-green-50"
+                        title="Označi kao završeno"
+                      >
+                        ✓ Završi
+                      </button>
+                    )}
+                    {/* Uredi i Obriši – samo admin */}
+                    {isAdmin && (
+                      <>
+                        <button
+                          onclick={`openEditModal(${JSON.stringify({
+                            id: task.id,
+                            title: task.title,
+                            apartment_id: task.apartment_id,
+                            due_date: task.due_date,
+                            due_time: task.due_time ?? '',
+                            assignee_ids: task.task_assignees.map((a) => a.user_id),
+                          })})`}
+                          class="btn-ghost text-xs px-2 py-1"
+                        >
+                          Uredi
+                        </button>
+                        <button
+                          onclick={`confirmDelete('${task.id}', '${task.title.replace(/'/g, "\\'")}')`}
+                          class="btn-ghost text-xs px-2 py-1 text-red-500 hover:bg-red-50 hover:text-red-700"
+                        >
+                          Obriši
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    )}
+  </div>
+
+  {/* ── Modali (samo admin) ─────────────────────────────────────────────────── */}
+  {isAdmin && (
+    <>
+      {/* Modal: Dodaj zadatak */}
+      <div id="modal-add" class="hidden modal-overlay" onclick="closeModalOnOverlay(event, 'modal-add')">
+        <div class="modal-content max-h-[90vh] overflow-y-auto" onclick="event.stopPropagation()">
+          <div class="p-6 border-b border-gray-100">
+            <h2 class="text-lg font-semibold text-gray-900">Dodaj zadatak</h2>
+          </div>
+          <form action="/api/zadatci/create" method="POST" class="p-6 space-y-5">
+            <div>
+              <label class="label">Naziv zadatka *</label>
+              <input name="title" type="text" required class="input" placeholder="npr. Čišćenje apartmana" />
+            </div>
+            <div>
+              <label class="label">Apartman *</label>
+              <select
+                name="apartment_id"
+                id="add-apartment_id"
+                required
+                class="input"
+                onchange="onAddApartmentChange(this.value)"
+              >
+                <option value="">Odaberi apartman...</option>
+                {adminApartments.map((apt) => (
+                  <option value={apt.id}>{apt.name}</option>
+                ))}
+              </select>
+            </div>
+            <div class="grid grid-cols-2 gap-4">
+              <div>
+                <label class="label">Datum *</label>
+                <input name="due_date" type="date" required class="input" />
+              </div>
+              <div>
+                <label class="label">Vrijeme</label>
+                <input name="due_time" type="time" class="input" />
+              </div>
+            </div>
+            <div>
+              <label class="label">Dodijeli osobama</label>
+              <div id="add-assignees-list" class="space-y-2 mt-1 min-h-[2rem]">
+                <p class="text-sm text-gray-400">Odaberite apartman za prikaz korisnika.</p>
+              </div>
+              <input type="hidden" name="assignee_ids" id="add-assignee_ids" value="[]" />
+            </div>
+            <div class="flex justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onclick="document.getElementById('modal-add').classList.add('hidden')"
+                class="btn-secondary"
+              >
+                Odustani
+              </button>
+              <button type="submit" class="btn-primary">Spremi</button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      {/* Modal: Uredi zadatak */}
+      <div id="modal-edit" class="hidden modal-overlay" onclick="closeModalOnOverlay(event, 'modal-edit')">
+        <div class="modal-content max-h-[90vh] overflow-y-auto" onclick="event.stopPropagation()">
+          <div class="p-6 border-b border-gray-100">
+            <h2 class="text-lg font-semibold text-gray-900">Uredi zadatak</h2>
+          </div>
+          <form action="/api/zadatci/update" method="POST" class="p-6 space-y-5">
+            <input type="hidden" name="id" id="edit-id" />
+            <div>
+              <label class="label">Naziv zadatka *</label>
+              <input id="edit-title" name="title" type="text" required class="input" />
+            </div>
+            <div>
+              <label class="label">Apartman *</label>
+              <select
+                id="edit-apartment_id"
+                name="apartment_id"
+                required
+                class="input"
+                onchange="onEditApartmentChange(this.value)"
+              >
+                <option value="">Odaberi apartman...</option>
+                {adminApartments.map((apt) => (
+                  <option value={apt.id}>{apt.name}</option>
+                ))}
+              </select>
+            </div>
+            <div class="grid grid-cols-2 gap-4">
+              <div>
+                <label class="label">Datum *</label>
+                <input id="edit-due_date" name="due_date" type="date" required class="input" />
+              </div>
+              <div>
+                <label class="label">Vrijeme</label>
+                <input id="edit-due_time" name="due_time" type="time" class="input" />
+              </div>
+            </div>
+            <div>
+              <label class="label">Dodijeli osobama</label>
+              <div id="edit-assignees-list" class="space-y-2 mt-1 min-h-[2rem]">
+                <p class="text-sm text-gray-400">Učitavanje...</p>
+              </div>
+              <input type="hidden" name="assignee_ids" id="edit-assignee_ids" value="[]" />
+            </div>
+            <div class="flex justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onclick="document.getElementById('modal-edit').classList.add('hidden')"
+                class="btn-secondary"
+              >
+                Odustani
+              </button>
+              <button type="submit" onclick="prepareEditSubmit()" class="btn-primary">Spremi promjene</button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      {/* Modal: Potvrda brisanja */}
+      <div id="modal-delete" class="hidden modal-overlay" onclick="closeModalOnOverlay(event, 'modal-delete')">
+        <div class="modal-content p-6" onclick="event.stopPropagation()">
+          <h2 class="text-lg font-semibold text-gray-900 mb-2">Obriši zadatak</h2>
+          <p class="text-gray-600 mb-6">
+            Jeste li sigurni da želite obrisati zadatak <strong id="delete-name"></strong>?
+            <br /><span class="text-sm text-red-600">Ova akcija se ne može poništiti.</span>
+          </p>
+          <form action="/api/zadatci/delete" method="POST">
+            <input type="hidden" name="id" id="delete-id" />
+            <div class="flex justify-end gap-3">
+              <button
+                type="button"
+                onclick="document.getElementById('modal-delete').classList.add('hidden')"
+                class="btn-secondary"
+              >
+                Odustani
+              </button>
+              <button type="submit" class="btn-danger">Obriši</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </>
+  )}
+
+  {/* Toast obavijest */}
+  <div
+    id="toast"
+    class="hidden fixed bottom-4 right-4 z-50 rounded-lg px-4 py-3 text-sm font-medium shadow-lg"
+  ></div>
+</AppLayout>
+
+<script define:vars={{ apartmentUsersMap }}>
+  // ─── Helpers ─────────────────────────────────────────────────────────────────
+
+  function closeModalOnOverlay(event, id) {
+    if (event.target === document.getElementById(id)) {
+      document.getElementById(id)?.classList.add('hidden');
+    }
+  }
+
+  function showToast(message, type = 'success') {
+    const toast = document.getElementById('toast');
+    if (!toast) return;
+    toast.textContent = message;
+    toast.className = `fixed bottom-4 right-4 z-50 rounded-lg px-4 py-3 text-sm font-medium shadow-lg ${
+      type === 'success'
+        ? 'bg-green-600 text-white'
+        : 'bg-red-600 text-white'
+    }`;
+    toast.classList.remove('hidden');
+    setTimeout(() => toast.classList.add('hidden'), 3000);
+  }
+
+  // ─── Renderiranje assignee checkboxova ───────────────────────────────────────
+
+  function renderAssignees(containerId, apartmentId, selectedIds = []) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+
+    const users = apartmentUsersMap[apartmentId] ?? [];
+    if (users.length === 0) {
+      container.innerHTML = '<p class="text-sm text-gray-400">Nema korisnika na ovom apartmanu.</p>';
+      return;
+    }
+
+    container.innerHTML = users
+      .map(
+        (u) => `
+        <label class="flex items-center gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            class="assignee-cb h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+            data-container="${containerId}"
+            value="${u.user_id}"
+            ${selectedIds.includes(u.user_id) ? 'checked' : ''}
+          />
+          <span class="text-sm text-gray-700">${u.full_name} <span class="text-gray-400">(${u.email})</span></span>
+        </label>`
+      )
+      .join('');
+  }
+
+  function collectAssigneeIds(containerId) {
+    const checkboxes = document.querySelectorAll(
+      `#${containerId} .assignee-cb:checked`
+    );
+    return Array.from(checkboxes).map((cb) => cb.value);
+  }
+
+  // ─── Modal: Dodaj ────────────────────────────────────────────────────────────
+
+  function initAddModal() {
+    const select = document.getElementById('add-apartment_id');
+    if (select) select.value = '';
+    const list = document.getElementById('add-assignees-list');
+    if (list) list.innerHTML = '<p class="text-sm text-gray-400">Odaberite apartman za prikaz korisnika.</p>';
+    const hiddenInput = document.getElementById('add-assignee_ids');
+    if (hiddenInput) hiddenInput.value = '[]';
+  }
+
+  function onAddApartmentChange(apartmentId) {
+    renderAssignees('add-assignees-list', apartmentId, []);
+  }
+
+  // ─── Modal: Uredi ────────────────────────────────────────────────────────────
+
+  function openEditModal(task) {
+    document.getElementById('edit-id').value = task.id;
+    document.getElementById('edit-title').value = task.title;
+    document.getElementById('edit-due_date').value = task.due_date;
+    document.getElementById('edit-due_time').value = task.due_time ?? '';
+
+    const aptSelect = document.getElementById('edit-apartment_id');
+    aptSelect.value = task.apartment_id;
+
+    renderAssignees('edit-assignees-list', task.apartment_id, task.assignee_ids ?? []);
+
+    document.getElementById('modal-edit')?.classList.remove('hidden');
+  }
+
+  function onEditApartmentChange(apartmentId) {
+    renderAssignees('edit-assignees-list', apartmentId, []);
+  }
+
+  function prepareEditSubmit() {
+    const ids = collectAssigneeIds('edit-assignees-list');
+    document.getElementById('edit-assignee_ids').value = JSON.stringify(ids);
+  }
+
+  // Prikupi assignee ids i spremi u hidden input prije submita (add modal)
+  document.querySelector('form[action="/api/zadatci/create"]')?.addEventListener('submit', () => {
+    const ids = collectAssigneeIds('add-assignees-list');
+    document.getElementById('add-assignee_ids').value = JSON.stringify(ids);
+  });
+
+  // ─── Modal: Obriši ───────────────────────────────────────────────────────────
+
+  function confirmDelete(id, title) {
+    document.getElementById('delete-id').value = id;
+    document.getElementById('delete-name').textContent = `"${title}"`;
+    document.getElementById('modal-delete')?.classList.remove('hidden');
+  }
+
+  // ─── Završi zadatak ──────────────────────────────────────────────────────────
+
+  async function completeTask(id) {
+    const btn = event?.currentTarget;
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = '...';
+    }
+    try {
+      const res = await fetch('/api/zadatci/complete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        showToast('Zadatak je označen kao završen.');
+        // Vizualno ažuriraj redak bez reload-a
+        const row = document.getElementById(`row-${id}`);
+        if (row) {
+          row.classList.add('opacity-60');
+          // Zamijeni badge
+          const badge = row.querySelector('.badge');
+          if (badge) {
+            badge.className = 'badge badge-green';
+            badge.textContent = 'Završen';
+          }
+          // Ukloni gumb Završi
+          if (btn) btn.remove();
+          // Precrtaj naziv
+          const titleEl = row.querySelector('td:first-child span');
+          if (titleEl) titleEl.classList.add('line-through', 'text-gray-400');
+        }
+      } else {
+        showToast(data.error ?? 'Greška pri označavanju zadatka.', 'error');
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = '✓ Završi';
+        }
+      }
+    } catch {
+      showToast('Greška pri slanju zahtjeva.', 'error');
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = '✓ Završi';
+      }
+    }
+  }
+
+  // ─── Expose to global ────────────────────────────────────────────────────────
+  window.closeModalOnOverlay = closeModalOnOverlay;
+  window.initAddModal = initAddModal;
+  window.onAddApartmentChange = onAddApartmentChange;
+  window.openEditModal = openEditModal;
+  window.onEditApartmentChange = onEditApartmentChange;
+  window.prepareEditSubmit = prepareEditSubmit;
+  window.confirmDelete = confirmDelete;
+  window.completeTask = completeTask;
+</script>

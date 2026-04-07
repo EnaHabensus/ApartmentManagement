@@ -1,0 +1,33 @@
+---
+import '../styles/global.css';
+import Sidebar from '../components/Sidebar.astro';
+import type { Profile } from '../lib/types';
+
+interface Props {
+  title: string;
+  user: Profile;
+  isAdmin: boolean;
+  activeRoute?: string;
+}
+
+const { title, user, isAdmin, activeRoute = '' } = Astro.props;
+---
+
+<!DOCTYPE html>
+<html lang="hr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{title} — ApartMan</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  </head>
+  <body class="flex h-screen overflow-hidden bg-gray-50">
+    <!-- Sidebar -->
+    <Sidebar user={user} isAdmin={isAdmin} activeRoute={activeRoute} />
+
+    <!-- Glavni sadržaj -->
+    <main class="flex-1 overflow-y-auto">
+      <slot />
+    </main>
+  </body>
+</html>

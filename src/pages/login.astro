@@ -1,0 +1,77 @@
+---
+import '../styles/global.css';
+const error = Astro.url.searchParams.get('error');
+---
+
+<!DOCTYPE html>
+<html lang="hr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Prijava — ApartMan</title>
+  </head>
+  <body class="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+    <div class="w-full max-w-md">
+      <!-- Logo -->
+      <div class="text-center mb-8">
+        <div class="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-blue-600 mb-4">
+          <span class="text-white font-bold text-xl">A</span>
+        </div>
+        <h1 class="text-2xl font-bold text-gray-900">ApartMan</h1>
+        <p class="text-gray-500 mt-1">Prijavite se u svoj račun</p>
+      </div>
+
+      <!-- Kartica -->
+      <div class="card p-8">
+        {error && (
+          <div class="mb-4 rounded-lg bg-red-50 border border-red-200 p-3">
+            <p class="text-sm text-red-600">
+              {error === 'invalid_credentials' && 'Email ili lozinka nisu ispravni.'}
+              {error === 'server_error' && 'Došlo je do greške. Pokušajte ponovno.'}
+              {error !== 'invalid_credentials' && error !== 'server_error' && error}
+            </p>
+          </div>
+        )}
+
+        <form action="/api/auth/login" method="POST" class="space-y-5">
+          <div>
+            <label for="email" class="label">Email adresa</label>
+            <input
+              id="email"
+              name="email"
+              type="email"
+              autocomplete="email"
+              required
+              class="input"
+              placeholder="vas@email.com"
+            />
+          </div>
+
+          <div>
+            <label for="password" class="label">Lozinka</label>
+            <input
+              id="password"
+              name="password"
+              type="password"
+              autocomplete="current-password"
+              required
+              class="input"
+              placeholder="••••••••"
+            />
+          </div>
+
+          <button type="submit" class="btn-primary w-full">
+            Prijavi se
+          </button>
+        </form>
+
+        <p class="mt-6 text-center text-sm text-gray-500">
+          Nemate račun?{' '}
+          <a href="/register" class="text-blue-600 font-medium hover:text-blue-700">
+            Registrirajte se
+          </a>
+        </p>
+      </div>
+    </div>
+  </body>
+</html>

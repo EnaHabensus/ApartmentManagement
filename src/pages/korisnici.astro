@@ -1,0 +1,546 @@
+---
+import AppLayout from '../layouts/AppLayout.astro';
+import { createSupabaseServerClient } from '../lib/supabase';
+import type { ApartmentUserWithProfile } from '../lib/types';
+
+const supabase = createSupabaseServerClient(Astro.request, Astro.cookies);
+const { data: { user } } = await supabase.auth.getUser();
+if (!user) return Astro.redirect('/login');
+
+const profile = Astro.locals.user!;
+
+// Dohvati apartmane gdje je prijavljeni korisnik admin
+const { data: myApartmentUsers } = await supabase
+  .from('apartment_users')
+  .select('apartment_id, apartments(id, name)')
+  .eq('user_id', user.id)
+  .eq('role', 'admin');
+
+const adminApartments = myApartmentUsers
+  ?.map((au) => au.apartments)
+  .filter((a): a is { id: string; name: string } => !!a) ?? [];
+
+const adminApartmentIds = adminApartments.map((a) => a.id);
+
+if (adminApartmentIds.length === 0) {
+  return Astro.redirect('/');
+}
+
+// Filter po apartmanu
+const filterApartmentId = Astro.url.searchParams.get('apartment_id') ?? '';
+
+// Dohvati sve korisnike na adminovim apartmanima
+const query = supabase
+  .from('apartment_users')
+  .select('*, profiles(*), apartments(name)')
+  .in('apartment_id', adminApartmentIds);
+
+const { data: apartmentUsers } = filterApartmentId
+  ? await query.eq('apartment_id', filterApartmentId)
+  : await query;
+
+// Grupiraj po korisnicima (uniqui korisnici s listom apartmana)
+const usersMap = new Map<string, {
+  user_id: string;
+  full_name: string;
+  email: string;
+  has_logged_in: boolean;
+  apartments: Array<{ apartment_id: string; apartment_name: string; role: string }>;
+}>();
+
+for (const au of (apartmentUsers ?? []) as ApartmentUserWithProfile[]) {
+  if (!au.profiles) continue;
+  const existing = usersMap.get(au.user_id);
+  const aptEntry = {
+    apartment_id: au.apartment_id,
+    apartment_name: au.apartments?.name ?? '',
+    role: au.role,
+  };
+  if (existing) {
+    existing.apartments.push(aptEntry);
+  } else {
+    usersMap.set(au.user_id, {
+      user_id: au.user_id,
+      full_name: au.profiles.full_name,
+      email: au.profiles.email,
+      has_logged_in: au.profiles.has_logged_in,
+      apartments: [aptEntry],
+    });
+  }
+}
+
+const users = Array.from(usersMap.values());
+
+const success = Astro.url.searchParams.get('success');
+const error = Astro.url.searchParams.get('error');
+---
+
+<AppLayout title="Korisnici" user={profile} isAdmin={true} activeRoute="/korisnici">
+  <div class="p-6 max-w-7xl mx-auto">
+    <!-- Header -->
+    <div class="flex items-center justify-between mb-6">
+      <div>
+        <h1 class="text-2xl font-bold text-gray-900">Korisnici</h1>
+        <p class="text-gray-500 text-sm mt-1">{users.length} korisnik{users.length === 1 ? '' : users.length < 5 ? 'a' : 'a'}</p>
+      </div>
+      <button
+        onclick="document.getElementById('modal-add').classList.remove('hidden')"
+        class="btn-primary"
+      >
+        + Dodaj korisnika
+      </button>
+    </div>
+
+    {success && (
+      <div class="mb-4 rounded-lg bg-green-50 border border-green-200 p-3">
+        <p class="text-sm text-green-700">
+          {success === 'updated' && 'Korisnik je uspješno ažuriran.'}
+          {success === 'deleted' && 'Korisnik je uspješno uklonjen s apartmana.'}
+          {success === 'invited' && 'Pozivnica je uspješno poslana.'}
+        </p>
+      </div>
+    )}
+
+    {error && (
+      <div class="mb-4 rounded-lg bg-red-50 border border-red-200 p-3">
+        <p class="text-sm text-red-600">{error}</p>
+      </div>
+    )}
+
+    <!-- Filter apartmana -->
+    <div class="mb-4 flex items-center gap-3">
+      <label class="label mb-0 text-sm font-medium text-gray-700 whitespace-nowrap">Filter apartmana:</label>
+      <form method="GET" action="/korisnici">
+        <select
+          name="apartment_id"
+          onchange="this.form.submit()"
+          class="input py-1.5 text-sm"
+        >
+          <option value="">Svi apartmani</option>
+          {adminApartments.map((apt) => (
+            <option value={apt.id} selected={filterApartmentId === apt.id}>
+              {apt.name}
+            </option>
+          ))}
+        </select>
+      </form>
+    </div>
+
+    <!-- Tablica korisnika -->
+    {users.length === 0 ? (
+      <div class="card p-12 text-center">
+        <div class="text-gray-400 mb-4">
+          <svg class="mx-auto h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+        </div>
+        <h3 class="text-lg font-medium text-gray-900 mb-2">Nema korisnika</h3>
+        <p class="text-gray-500 mb-6">Pozovite prvog korisnika da biste počeli upravljati apartmanom.</p>
+        <button
+          onclick="document.getElementById('modal-add').classList.remove('hidden')"
+          class="btn-primary"
+        >
+          + Dodaj korisnika
+        </button>
+      </div>
+    ) : (
+      <div class="table-wrapper">
+        <table class="w-full text-sm">
+          <thead>
+            <tr>
+              <th class="table-head">Ime i prezime</th>
+              <th class="table-head">Email</th>
+              <th class="table-head">Uloga</th>
+              <th class="table-head">Status</th>
+              <th class="table-head">Apartmani</th>
+              <th class="table-head">Akcije</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100">
+            {users.map((u) => (
+              <tr class="table-row">
+                <td class="table-cell font-medium text-gray-900">{u.full_name}</td>
+                <td class="table-cell text-gray-500">{u.email}</td>
+                <td class="table-cell">
+                  <div class="flex flex-wrap gap-1">
+                    {u.apartments.map((apt) => (
+                      <span class={`badge ${apt.role === 'admin' ? 'badge-blue' : 'badge-gray'}`}>
+                        {apt.role === 'admin' ? 'Admin' : 'Staff'}
+                      </span>
+                    ))}
+                  </div>
+                </td>
+                <td class="table-cell">
+                  {u.has_logged_in ? (
+                    <span class="badge badge-green">Aktivan</span>
+                  ) : (
+                    <span class="badge bg-yellow-100 text-yellow-700">Pozvan</span>
+                  )}
+                </td>
+                <td class="table-cell">
+                  <div class="flex flex-wrap gap-1">
+                    {u.apartments.map((apt) => (
+                      <span class="badge badge-gray">{apt.apartment_name}</span>
+                    ))}
+                  </div>
+                </td>
+                <td class="table-cell">
+                  <div class="relative inline-block" x-data="{ open: false }">
+                    <button
+                      onclick={`toggleDropdown('dropdown-${u.user_id}')`}
+                      class="btn-ghost px-2 py-1 text-gray-500 hover:text-gray-900"
+                      title="Akcije"
+                    >
+                      ⋯
+                    </button>
+                    <div
+                      id={`dropdown-${u.user_id}`}
+                      class="hidden absolute right-0 mt-1 w-36 bg-white rounded-lg shadow-lg border border-gray-200 z-10 py-1"
+                    >
+                      <button
+                        onclick={`openEditModal(${JSON.stringify(u)})`}
+                        class="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                      >
+                        Uredi
+                      </button>
+                      <button
+                        onclick={`confirmDelete('${u.user_id}', '${u.full_name}', ${JSON.stringify(u.apartments.map((a) => a.apartment_id))})`}
+                        class="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50"
+                      >
+                        Obriši
+                      </button>
+                    </div>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    )}
+  </div>
+
+  <!-- Modal: Dodaj korisnika -->
+  <div id="modal-add" class="hidden modal-overlay" onclick="closeModalOnOverlay(event, 'modal-add')">
+    <div class="modal-content max-h-[90vh] overflow-y-auto" onclick="event.stopPropagation()">
+      <div class="p-6 border-b border-gray-100">
+        <h2 class="text-lg font-semibold text-gray-900">Dodaj korisnika</h2>
+        <p class="text-sm text-gray-500 mt-1">Korisnik će primiti email s pozivnicom.</p>
+      </div>
+      <div class="p-6 space-y-5" id="form-add-wrapper">
+        <div>
+          <label class="label">Email *</label>
+          <input id="add-email" type="email" required class="input" placeholder="korisnik@email.com" />
+        </div>
+        <div>
+          <label class="label">Ime i prezime *</label>
+          <input id="add-full_name" type="text" required class="input" placeholder="Ime Prezime" />
+        </div>
+        <div>
+          <label class="label">Uloga</label>
+          <select id="add-role" class="input">
+            <option value="staff">Staff</option>
+            <option value="admin">Admin</option>
+          </select>
+        </div>
+        <div>
+          <label class="label">Apartmani *</label>
+          <div class="space-y-2 mt-1">
+            {adminApartments.map((apt) => (
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  name="apartment_ids"
+                  value={apt.id}
+                  class="add-apt-checkbox h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                />
+                <span class="text-sm text-gray-700">{apt.name}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+
+        <div id="add-error" class="hidden rounded-lg bg-red-50 border border-red-200 p-3">
+          <p class="text-sm text-red-600" id="add-error-msg"></p>
+        </div>
+
+        <div class="flex justify-end gap-3 pt-2">
+          <button
+            type="button"
+            onclick="document.getElementById('modal-add').classList.add('hidden')"
+            class="btn-secondary"
+          >
+            Odustani
+          </button>
+          <button
+            type="button"
+            id="btn-send-invite"
+            onclick="sendInvite()"
+            class="btn-primary"
+          >
+            Pošalji pozivnicu
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Uredi korisnika -->
+  <div id="modal-edit" class="hidden modal-overlay" onclick="closeModalOnOverlay(event, 'modal-edit')">
+    <div class="modal-content max-h-[90vh] overflow-y-auto" onclick="event.stopPropagation()">
+      <div class="p-6 border-b border-gray-100">
+        <h2 class="text-lg font-semibold text-gray-900">Uredi korisnika</h2>
+      </div>
+      <form action="/api/korisnici/update" method="POST" class="p-6 space-y-5" id="form-edit">
+        <input type="hidden" name="user_id" id="edit-user_id" />
+        <input type="hidden" name="apartment_roles" id="edit-apartment_roles" />
+
+        <div>
+          <label class="label">Ime i prezime</label>
+          <input id="edit-full_name" name="full_name" type="text" required class="input" />
+        </div>
+        <div>
+          <label class="label">Email</label>
+          <input id="edit-email-display" type="email" disabled class="input bg-gray-50 text-gray-500 cursor-not-allowed" />
+        </div>
+
+        <div>
+          <label class="label">Apartmani i uloge</label>
+          <div id="edit-apartments-list" class="space-y-3 mt-1">
+            <!-- Dynamically filled via JS -->
+          </div>
+        </div>
+
+        <div>
+          <label class="label">Dodaj na apartman</label>
+          <div class="space-y-2 mt-1" id="edit-add-apartments">
+            {adminApartments.map((apt) => (
+              <label class="flex items-center gap-2 cursor-pointer edit-apt-add-row" data-apt-id={apt.id} data-apt-name={apt.name}>
+                <input
+                  type="checkbox"
+                  class="edit-apt-checkbox h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  data-apt-id={apt.id}
+                />
+                <span class="text-sm text-gray-700">{apt.name}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+
+        <div class="flex justify-end gap-3 pt-2">
+          <button
+            type="button"
+            onclick="document.getElementById('modal-edit').classList.add('hidden')"
+            class="btn-secondary"
+          >
+            Odustani
+          </button>
+          <button type="submit" onclick="prepareEditSubmit()" class="btn-primary">
+            Spremi
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Potvrda brisanja -->
+  <div id="modal-delete" class="hidden modal-overlay" onclick="closeModalOnOverlay(event, 'modal-delete')">
+    <div class="modal-content p-6" onclick="event.stopPropagation()">
+      <h2 class="text-lg font-semibold text-gray-900 mb-2">Ukloni korisnika</h2>
+      <p class="text-gray-600 mb-2">
+        Jeste li sigurni da želite ukloniti <strong id="delete-name"></strong> s apartmana?
+      </p>
+      <p class="text-sm text-gray-500 mb-2">Odaberite s kojeg apartmana želite ukloniti korisnika:</p>
+      <form action="/api/korisnici/delete" method="POST">
+        <input type="hidden" name="user_id" id="delete-user_id" />
+        <div id="delete-apartments-list" class="space-y-2 mb-6">
+          <!-- Filled via JS -->
+        </div>
+        <div class="flex justify-end gap-3">
+          <button
+            type="button"
+            onclick="document.getElementById('modal-delete').classList.add('hidden')"
+            class="btn-secondary"
+          >
+            Odustani
+          </button>
+          <button type="submit" class="btn-danger">Ukloni</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</AppLayout>
+
+<script>
+  // ─── Helpers ─────────────────────────────────────────────────────────────────
+
+  function closeModalOnOverlay(event: MouseEvent, id: string) {
+    if (event.target === document.getElementById(id)) {
+      document.getElementById(id)?.classList.add('hidden');
+    }
+  }
+
+  function toggleDropdown(id: string) {
+    // Zatvori sve ostale dropdowne
+    document.querySelectorAll('[id^="dropdown-"]').forEach((el) => {
+      if (el.id !== id) el.classList.add('hidden');
+    });
+    document.getElementById(id)?.classList.toggle('hidden');
+  }
+
+  // Zatvori dropdown klikom izvan
+  document.addEventListener('click', (e: MouseEvent) => {
+    const target = e.target as HTMLElement;
+    if (!target.closest('[id^="dropdown-"]') && !target.closest('button[onclick*="toggleDropdown"]')) {
+      document.querySelectorAll('[id^="dropdown-"]').forEach((el) => el.classList.add('hidden'));
+    }
+  });
+
+  // ─── Modal Dodaj ─────────────────────────────────────────────────────────────
+
+  async function sendInvite() {
+    const email = (document.getElementById('add-email') as HTMLInputElement).value.trim();
+    const fullName = (document.getElementById('add-full_name') as HTMLInputElement).value.trim();
+    const role = (document.getElementById('add-role') as HTMLSelectElement).value;
+    const checkboxes = document.querySelectorAll<HTMLInputElement>('.add-apt-checkbox:checked');
+    const apartment_ids = Array.from(checkboxes).map((cb) => cb.value);
+
+    const errorEl = document.getElementById('add-error')!;
+    const errorMsg = document.getElementById('add-error-msg')!;
+    errorEl.classList.add('hidden');
+
+    if (!email || !fullName) {
+      errorMsg.textContent = 'Email i ime i prezime su obavezni.';
+      errorEl.classList.remove('hidden');
+      return;
+    }
+    if (apartment_ids.length === 0) {
+      errorMsg.textContent = 'Odaberite barem jedan apartman.';
+      errorEl.classList.remove('hidden');
+      return;
+    }
+
+    const btn = document.getElementById('btn-send-invite') as HTMLButtonElement;
+    btn.disabled = true;
+    btn.textContent = 'Slanje...';
+
+    try {
+      const res = await fetch('/api/invite/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, full_name: fullName, apartment_ids, role }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        errorMsg.textContent = data.error ?? 'Greška pri slanju pozivnice.';
+        errorEl.classList.remove('hidden');
+      } else {
+        document.getElementById('modal-add')?.classList.add('hidden');
+        window.location.href = '/korisnici?success=invited';
+      }
+    } catch {
+      errorMsg.textContent = 'Greška pri slanju pozivnice.';
+      errorEl.classList.remove('hidden');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Pošalji pozivnicu';
+    }
+  }
+
+  // ─── Modal Uredi ─────────────────────────────────────────────────────────────
+
+  type ApartmentEntry = { apartment_id: string; apartment_name: string; role: string };
+
+  function openEditModal(u: { user_id: string; full_name: string; email: string; apartments: ApartmentEntry[] }) {
+    (document.getElementById('edit-user_id') as HTMLInputElement).value = u.user_id;
+    (document.getElementById('edit-full_name') as HTMLInputElement).value = u.full_name;
+    (document.getElementById('edit-email-display') as HTMLInputElement).value = u.email;
+
+    // Popuni listu apartmana s ulogama
+    const list = document.getElementById('edit-apartments-list')!;
+    list.innerHTML = '';
+    const existingAptIds = new Set(u.apartments.map((a) => a.apartment_id));
+
+    u.apartments.forEach((apt) => {
+      const row = document.createElement('div');
+      row.className = 'flex items-center gap-3 p-3 bg-gray-50 rounded-lg';
+      row.dataset.aptId = apt.apartment_id;
+      row.innerHTML = `
+        <span class="flex-1 text-sm font-medium text-gray-700">${apt.apartment_name}</span>
+        <select class="edit-role-select input py-1 text-sm w-28" data-apt-id="${apt.apartment_id}">
+          <option value="staff" ${apt.role === 'staff' ? 'selected' : ''}>Staff</option>
+          <option value="admin" ${apt.role === 'admin' ? 'selected' : ''}>Admin</option>
+        </select>
+      `;
+      list.appendChild(row);
+    });
+
+    // Prikaži checkboxove samo za apartmane na kojima korisnik NIJE
+    const addRows = document.querySelectorAll<HTMLElement>('.edit-apt-add-row');
+    addRows.forEach((row) => {
+      const aptId = row.dataset.aptId ?? '';
+      const cb = row.querySelector<HTMLInputElement>('.edit-apt-checkbox')!;
+      cb.checked = false;
+      row.style.display = existingAptIds.has(aptId) ? 'none' : 'flex';
+    });
+
+    document.getElementById('modal-edit')?.classList.remove('hidden');
+  }
+
+  function prepareEditSubmit() {
+    const roleSelects = document.querySelectorAll<HTMLSelectElement>('.edit-role-select');
+    const aptRoles: Array<{ apartment_id: string; role: string }> = [];
+
+    roleSelects.forEach((sel) => {
+      aptRoles.push({ apartment_id: sel.dataset.aptId!, role: sel.value });
+    });
+
+    // Dodaj nove apartmane iz checkboxova
+    const newCbs = document.querySelectorAll<HTMLInputElement>('.edit-apt-checkbox:checked');
+    newCbs.forEach((cb) => {
+      aptRoles.push({ apartment_id: cb.dataset.aptId!, role: 'staff' });
+    });
+
+    (document.getElementById('edit-apartment_roles') as HTMLInputElement).value = JSON.stringify(aptRoles);
+  }
+
+  // ─── Modal Obriši ─────────────────────────────────────────────────────────────
+
+  function confirmDelete(userId: string, fullName: string, apartmentIds: string[]) {
+    (document.getElementById('delete-user_id') as HTMLInputElement).value = userId;
+    document.getElementById('delete-name')!.textContent = fullName;
+
+    // Popuni listu apartmana za odabir brisanja
+    const list = document.getElementById('delete-apartments-list')!;
+    list.innerHTML = '';
+
+    // Dohvati nazive apartmana iz DOM-a (badge elementi u retku)
+    // Koristimo apartmentIds da kreiramo radio opcije
+    apartmentIds.forEach((aptId, idx) => {
+      // Pokušaj naći naziv iz tablice
+      const aptBadges = document.querySelectorAll(`[data-apt-id="${aptId}"]`);
+      let aptName = aptId;
+      if (aptBadges.length > 0) {
+        aptName = (aptBadges[0] as HTMLElement).dataset.aptName ?? aptId;
+      }
+
+      const label = document.createElement('label');
+      label.className = 'flex items-center gap-2 cursor-pointer';
+      label.innerHTML = `
+        <input type="radio" name="apartment_id" value="${aptId}" class="h-4 w-4" ${idx === 0 ? 'required checked' : ''} />
+        <span class="text-sm text-gray-700">${aptName}</span>
+      `;
+      list.appendChild(label);
+    });
+
+    document.getElementById('modal-delete')?.classList.remove('hidden');
+  }
+
+  // Expose to global scope
+  (window as any).closeModalOnOverlay = closeModalOnOverlay;
+  (window as any).toggleDropdown = toggleDropdown;
+  (window as any).sendInvite = sendInvite;
+  (window as any).openEditModal = openEditModal;
+  (window as any).prepareEditSubmit = prepareEditSubmit;
+  (window as any).confirmDelete = confirmDelete;
+</script>

@@ -1,0 +1,135 @@
+---
+import '../../styles/global.css';
+import { createSupabaseAdminClient } from '../../lib/supabase';
+
+const token = Astro.url.searchParams.get('token');
+const error = Astro.url.searchParams.get('error');
+
+if (!token) {
+  return Astro.redirect('/login');
+}
+
+const supabase = createSupabaseAdminClient();
+const { data: invite } = await supabase
+  .from('invite_tokens')
+  .select('*')
+  .eq('id', token)
+  .single();
+
+if (!invite) {
+  return Astro.redirect('/login?error=Pozivnica+nije+pronađena.');
+}
+
+if (invite.accepted_at) {
+  return Astro.redirect('/login?error=Pozivnica+je+već+iskorištena.');
+}
+
+if (new Date(invite.expires_at) < new Date()) {
+  return Astro.redirect('/login?error=Pozivnica+je+istekla.');
+}
+
+// Dohvati naziv apartmana (prvi iz liste)
+const { data: apartments } = await supabase
+  .from('apartments')
+  .select('name')
+  .in('id', invite.apartment_ids);
+
+const apartmentNames = apartments?.map((a) => a.name).join(', ') ?? '';
+
+// Dohvati tko je poslao pozivnicu
+const { data: inviter } = await supabase
+  .from('profiles')
+  .select('full_name')
+  .eq('id', invite.invited_by)
+  .single();
+---
+
+<!DOCTYPE html>
+<html lang="hr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Pozivnica — ApartMan</title>
+  </head>
+  <body class="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+    <div class="w-full max-w-md">
+      <div class="text-center mb-8">
+        <div class="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-blue-600 mb-4">
+          <span class="text-white font-bold text-xl">A</span>
+        </div>
+        <h1 class="text-2xl font-bold text-gray-900">ApartMan</h1>
+        <p class="text-gray-500 mt-1">
+          {inviter?.full_name} te poziva na: <strong>{apartmentNames}</strong>
+        </p>
+      </div>
+
+      <div class="card p-8">
+        {error && (
+          <div class="mb-4 rounded-lg bg-red-50 border border-red-200 p-3">
+            <p class="text-sm text-red-600">{error}</p>
+          </div>
+        )}
+
+        <h2 class="text-lg font-semibold text-gray-900 mb-6">Kreirajte račun</h2>
+
+        <form action="/api/invite/accept-new" method="POST" class="space-y-5">
+          <input type="hidden" name="token" value={token} />
+
+          <div>
+            <label for="full_name" class="label">Ime i prezime</label>
+            <input
+              id="full_name"
+              name="full_name"
+              type="text"
+              required
+              class="input"
+              placeholder="Ivan Horvat"
+            />
+          </div>
+
+          <div>
+            <label for="email" class="label">Email adresa</label>
+            <input
+              id="email"
+              name="email"
+              type="email"
+              required
+              value={invite.email}
+              readonly
+              class="input bg-gray-50 text-gray-500"
+            />
+          </div>
+
+          <div>
+            <label for="password" class="label">Lozinka</label>
+            <input
+              id="password"
+              name="password"
+              type="password"
+              required
+              minlength="8"
+              class="input"
+              placeholder="Najmanje 8 znakova"
+            />
+          </div>
+
+          <div>
+            <label for="password_confirm" class="label">Potvrda lozinke</label>
+            <input
+              id="password_confirm"
+              name="password_confirm"
+              type="password"
+              required
+              class="input"
+              placeholder="Ponovite lozinku"
+            />
+          </div>
+
+          <button type="submit" class="btn-primary w-full">
+            Kreiraj račun i prihvati pozivnicu
+          </button>
+        </form>
+      </div>
+    </div>
+  </body>
+</html>
