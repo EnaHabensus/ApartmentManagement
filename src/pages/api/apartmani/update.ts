@@ -10,8 +10,10 @@ export const POST: APIRoute = async ({ request, cookies, redirect }) => {
   const id = formData.get('id')?.toString();
   if (!id) return redirect('/apartmani?error=' + encodeURIComponent('ID apartmana nedostaje.'));
 
-  // Provjeri admin ulogu (korisnik može čitati vlastite apartment_users zapise)
-  const { data: role } = await supabase
+  const adminSupabase = createSupabaseAdminClient();
+
+  // Provjeri admin ulogu
+  const { data: role } = await adminSupabase
     .from('apartment_users')
     .select('role')
     .eq('apartment_id', id)
@@ -22,7 +24,8 @@ export const POST: APIRoute = async ({ request, cookies, redirect }) => {
     return redirect('/apartmani?error=' + encodeURIComponent('Nemate prava za uređivanje.'));
   }
 
-  const data = {
+  const colorVal = formData.get('color')?.toString();
+  const data: Record<string, string | undefined> = {
     name: formData.get('name')?.toString()?.trim(),
     address: formData.get('address')?.toString()?.trim(),
     postal_code: formData.get('postal_code')?.toString()?.trim(),
@@ -36,16 +39,16 @@ export const POST: APIRoute = async ({ request, cookies, redirect }) => {
     owner_postal_code: formData.get('owner_postal_code')?.toString()?.trim(),
     owner_city: formData.get('owner_city')?.toString()?.trim(),
     owner_country: formData.get('owner_country')?.toString()?.trim(),
-    color: formData.get('color')?.toString() || '#3B82F6',
   };
 
-  const adminSupabase = createSupabaseAdminClient();
+  if (colorVal) data.color = colorVal;
+
   const { error } = await adminSupabase
     .from('apartments')
     .update(data)
     .eq('id', id);
 
-  if (error) return redirect('/apartmani?error=' + encodeURIComponent('Greška pri ažuriranju.'));
+  if (error) return redirect('/apartmani?error=' + encodeURIComponent('Greška pri ažuriranju: ' + error.message));
 
   return redirect('/apartmani?success=updated');
 };
