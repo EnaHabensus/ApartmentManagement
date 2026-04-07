@@ -329,16 +329,6 @@ create policy "Admin vidi sve zadatke svojih apartmana"
     )
   );
 
-create policy "Staff vidi zadatke koji su im dodijeljeni"
-  on public.tasks for select
-  using (
-    exists (
-      select 1 from public.task_assignees
-      where task_id = tasks.id
-        and user_id = auth.uid()
-    )
-  );
-
 create policy "Admin može kreirati zadatke"
   on public.tasks for insert
   with check (
@@ -361,16 +351,6 @@ create policy "Admin može urediti zadatke"
     )
   );
 
--- Staff može označiti zadatak kao završen (samo ako je dodijeljen)
-create policy "Staff može označiti završeno"
-  on public.tasks for update
-  using (
-    exists (
-      select 1 from public.task_assignees
-      where task_id = tasks.id
-        and user_id = auth.uid()
-    )
-  );
 
 create policy "Admin može obrisati zadatke"
   on public.tasks for delete
@@ -404,6 +384,27 @@ create policy "Svi vide dodjele zadataka"
       where t.id = task_assignees.task_id
         and au.user_id = auth.uid()
         and au.role = 'admin'
+    )
+  );
+
+-- Politike za tasks koje ovise o task_assignees (moraju biti nakon kreiranja task_assignees)
+create policy "Staff vidi zadatke koji su im dodijeljeni"
+  on public.tasks for select
+  using (
+    exists (
+      select 1 from public.task_assignees
+      where task_id = tasks.id
+        and user_id = auth.uid()
+    )
+  );
+
+create policy "Staff može označiti završeno"
+  on public.tasks for update
+  using (
+    exists (
+      select 1 from public.task_assignees
+      where task_id = tasks.id
+        and user_id = auth.uid()
     )
   );
 
