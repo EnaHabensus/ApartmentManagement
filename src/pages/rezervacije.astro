@@ -597,7 +597,7 @@ const tabs = [
   <div id="toast" class="hidden fixed bottom-4 right-4 z-50 rounded-lg px-4 py-3 text-sm font-medium shadow-lg"></div>
 </AppLayout>
 
-<script define:vars={{ aptCheckOutTimeMapData: Object.fromEntries(aptCheckOutTimeMap) }}>
+<script>
   function closeModalOnOverlay(event: MouseEvent, id: string) {
     if (event.target === document.getElementById(id)) {
       document.getElementById(id)?.classList.add('hidden');
