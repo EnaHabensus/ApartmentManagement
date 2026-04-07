@@ -194,31 +194,19 @@ const error = Astro.url.searchParams.get('error');
                   </div>
                 </td>
                 <td class="table-cell px-4 py-3">
-                  <div class="relative inline-block" x-data="{ open: false }">
+                  <div class="flex items-center gap-1">
                     <button
-                      onclick={`toggleDropdown('dropdown-${u.user_id}')`}
-                      class="btn-ghost px-2 py-1 text-gray-500 hover:text-gray-900"
-                      title="Akcije"
+                      onclick={`openEditModal(${JSON.stringify(u)})`}
+                      class="btn-ghost text-xs px-2 py-1"
                     >
-                      ⋯
+                      Uredi
                     </button>
-                    <div
-                      id={`dropdown-${u.user_id}`}
-                      class="hidden absolute right-0 mt-1 w-36 bg-white rounded-lg shadow-lg border border-gray-200 z-10 py-1"
+                    <button
+                      onclick={`confirmDelete('${u.user_id}', '${u.full_name}', ${JSON.stringify(u.apartments.map((a) => a.apartment_id))})`}
+                      class="btn-ghost text-xs px-2 py-1 text-red-500 hover:bg-red-50 hover:text-red-700"
                     >
-                      <button
-                        onclick={`openEditModal(${JSON.stringify(u)})`}
-                        class="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                      >
-                        Uredi
-                      </button>
-                      <button
-                        onclick={`confirmDelete('${u.user_id}', '${u.full_name}', ${JSON.stringify(u.apartments.map((a) => a.apartment_id))})`}
-                        class="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50"
-                      >
-                        Obriši
-                      </button>
-                    </div>
+                      Obriši
+                    </button>
                   </div>
                 </td>
               </tr>
