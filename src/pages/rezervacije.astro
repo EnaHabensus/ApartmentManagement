@@ -371,7 +371,10 @@ const tabs = [
           <div class="p-6 border-b border-gray-100">
             <h2 class="text-lg font-semibold text-gray-900">Dodaj rezervaciju</h2>
           </div>
-          <form action="/api/rezervacije/create" method="POST" class="p-6 space-y-4">
+          <form id="form-add" class="p-6 space-y-4">
+            <div id="add-error" class="hidden rounded-lg bg-red-50 border border-red-200 p-3">
+              <p class="text-sm text-red-600" id="add-error-text"></p>
+            </div>
             <div class="grid grid-cols-2 gap-4">
               <div class="col-span-2">
                 <label class="label">Gost (ime i prezime) *</label>
@@ -426,7 +429,7 @@ const tabs = [
               <button type="button" onclick="document.getElementById('modal-add').classList.add('hidden')" class="btn-secondary">
                 Odustani
               </button>
-              <button type="submit" class="btn-primary">Spremi</button>
+              <button type="submit" id="add-submit" class="btn-primary">Spremi</button>
             </div>
           </form>
         </div>
@@ -438,7 +441,10 @@ const tabs = [
           <div class="p-6 border-b border-gray-100">
             <h2 class="text-lg font-semibold text-gray-900">Uredi rezervaciju</h2>
           </div>
-          <form action="/api/rezervacije/update" method="POST" class="p-6 space-y-4">
+          <form id="form-edit" class="p-6 space-y-4">
+            <div id="edit-error" class="hidden rounded-lg bg-red-50 border border-red-200 p-3">
+              <p class="text-sm text-red-600" id="edit-error-text"></p>
+            </div>
             <input type="hidden" name="id" id="edit-id" />
             <div class="grid grid-cols-2 gap-4">
               <div class="col-span-2">
@@ -494,7 +500,7 @@ const tabs = [
               <button type="button" onclick="document.getElementById('modal-edit').classList.add('hidden')" class="btn-secondary">
                 Odustani
               </button>
-              <button type="submit" class="btn-primary">Spremi promjene</button>
+              <button type="submit" id="edit-submit" class="btn-primary">Spremi promjene</button>
             </div>
           </form>
         </div>
@@ -534,6 +540,9 @@ const tabs = [
 
   function openAddModal() {
     document.getElementById('modal-add')?.classList.remove('hidden');
+    // Resetiraj grešku
+    const err = document.getElementById('add-error');
+    if (err) err.classList.add('hidden');
   }
 
   function openEditModal(r: {
@@ -551,8 +560,58 @@ const tabs = [
     (document.getElementById('edit-payment_type') as HTMLSelectElement).value = r.payment_type;
     (document.getElementById('edit-amount_gross') as HTMLInputElement).value = String(r.amount_gross);
     (document.getElementById('edit-commission') as HTMLInputElement).value = String(r.commission);
+    // Resetiraj grešku
+    const err = document.getElementById('edit-error');
+    if (err) err.classList.add('hidden');
     document.getElementById('modal-edit')?.classList.remove('hidden');
   }
+
+  function showModalError(errorDivId: string, errorTextId: string, message: string) {
+    const div = document.getElementById(errorDivId);
+    const txt = document.getElementById(errorTextId);
+    if (div && txt) {
+      txt.textContent = message;
+      div.classList.remove('hidden');
+      div.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }
+
+  function setSubmitLoading(btnId: string, loading: boolean) {
+    const btn = document.getElementById(btnId) as HTMLButtonElement | null;
+    if (!btn) return;
+    btn.disabled = loading;
+    btn.textContent = loading ? 'Spremanje...' : btn.id === 'add-submit' ? 'Spremi' : 'Spremi promjene';
+  }
+
+  // AJAX submit — Dodaj
+  document.getElementById('form-add')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    setSubmitLoading('add-submit', true);
+    const form = e.target as HTMLFormElement;
+    const res = await fetch('/api/rezervacije/create', { method: 'POST', body: new FormData(form) });
+    const data = await res.json();
+    setSubmitLoading('add-submit', false);
+    if (!res.ok) {
+      showModalError('add-error', 'add-error-text', data.error ?? 'Greška pri kreiranju.');
+    } else {
+      window.location.href = '/rezervacije?success=created';
+    }
+  });
+
+  // AJAX submit — Uredi
+  document.getElementById('form-edit')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    setSubmitLoading('edit-submit', true);
+    const form = e.target as HTMLFormElement;
+    const res = await fetch('/api/rezervacije/update', { method: 'POST', body: new FormData(form) });
+    const data = await res.json();
+    setSubmitLoading('edit-submit', false);
+    if (!res.ok) {
+      showModalError('edit-error', 'edit-error-text', data.error ?? 'Greška pri ažuriranju.');
+    } else {
+      window.location.href = '/rezervacije?success=updated';
+    }
+  });
 
   function confirmCancel(id: string, name: string) {
     (document.getElementById('cancel-id') as HTMLInputElement).value = id;
