@@ -109,6 +109,23 @@ const { data: upcoming } = await supabase
   .lte('check_in', in5DaysStr)
   .order('check_in');
 
+// Sve aktivne rezervacije za kalendar (bez ograničenja datuma)
+const { data: allCalRez } = await supabase
+  .from('reservations')
+  .select('id, guest_name, check_in, check_out, apartment_id')
+  .in('apartment_id', filteredAptIds.length ? filteredAptIds : ['none'])
+  .eq('status', 'active');
+
+const aptNames = Object.fromEntries(apartments.map((a, i) => [a.id, { name: a.name, colorIdx: i }]));
+const calendarData = (allCalRez ?? []).map((r) => ({
+  id: r.id,
+  guest: r.guest_name,
+  check_in: r.check_in,
+  check_out: r.check_out,
+  aptName: aptNames[r.apartment_id]?.name ?? '',
+  colorIdx: aptNames[r.apartment_id]?.colorIdx ?? 0,
+}));
+
 function formatDate(d: string) {
   const [y, m, day] = d.split('-');
   return `${day}.${m}.${y}`;
@@ -228,5 +245,108 @@ function getStatus(r: { check_in: string; check_out: string }) {
         </div>
       )}
     </div>
+    <!-- Kalendar rezervacija -->
+    <div class="card mt-6">
+      <div class="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+        <h2 class="font-semibold text-gray-900">Kalendar rezervacija</h2>
+        <div class="flex items-center gap-3">
+          <button id="cal-prev" class="btn-ghost px-2 py-1 text-gray-600 hover:text-gray-900">← Prethodni</button>
+          <span id="cal-title" class="text-sm font-semibold text-gray-800 min-w-[140px] text-center"></span>
+          <button id="cal-next" class="btn-ghost px-2 py-1 text-gray-600 hover:text-gray-900">Sljedeći →</button>
+        </div>
+      </div>
+      <div class="p-4">
+        <div id="cal-grid"></div>
+      </div>
+    </div>
   </div>
 </AppLayout>
+
+<script define:vars={{ calendarData }}>
+  const COLORS = [
+    { bg: 'bg-blue-100', text: 'text-blue-800', bar: 'bg-blue-200', border: 'border-blue-300' },
+    { bg: 'bg-purple-100', text: 'text-purple-800', bar: 'bg-purple-200', border: 'border-purple-300' },
+    { bg: 'bg-green-100', text: 'text-green-800', bar: 'bg-green-200', border: 'border-green-300' },
+    { bg: 'bg-orange-100', text: 'text-orange-800', bar: 'bg-orange-200', border: 'border-orange-300' },
+    { bg: 'bg-pink-100', text: 'text-pink-800', bar: 'bg-pink-200', border: 'border-pink-300' },
+  ];
+  const DAYS = ['Pon', 'Uto', 'Sri', 'Čet', 'Pet', 'Sub', 'Ned'];
+  const MONTHS = ['Siječanj','Veljača','Ožujak','Travanj','Svibanj','Lipanj','Srpanj','Kolovoz','Rujan','Listopad','Studeni','Prosinac'];
+
+  let calYear = new Date().getFullYear();
+  let calMonth = new Date().getMonth();
+
+  function toDate(s) { return new Date(s + 'T00:00:00'); }
+
+  function renderCalendar() {
+    const today = new Date(); today.setHours(0,0,0,0);
+    document.getElementById('cal-title').textContent = `${MONTHS[calMonth]} ${calYear}`;
+
+    const firstDay = new Date(calYear, calMonth, 1);
+    const lastDay = new Date(calYear, calMonth + 1, 0);
+    // Monday=0 offset
+    let startOffset = (firstDay.getDay() + 6) % 7;
+    const totalCells = startOffset + lastDay.getDate();
+    const rows = Math.ceil(totalCells / 7);
+
+    let html = `<div class="grid grid-cols-7 gap-px bg-gray-200 rounded-lg overflow-hidden">`;
+
+    // Header
+    for (const d of DAYS) {
+      html += `<div class="bg-gray-50 text-center text-xs font-semibold text-gray-500 py-2">${d}</div>`;
+    }
+
+    // Cells
+    for (let i = 0; i < rows * 7; i++) {
+      const dayNum = i - startOffset + 1;
+      const isValid = dayNum >= 1 && dayNum <= lastDay.getDate();
+      const dateStr = isValid ? `${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(dayNum).padStart(2,'0')}` : '';
+      const isToday = isValid && new Date(calYear, calMonth, dayNum).getTime() === today.getTime();
+
+      if (!isValid) {
+        html += `<div class="bg-gray-50 min-h-[80px] p-1"></div>`;
+        continue;
+      }
+
+      // Find reservations active on this day
+      const dayRez = calendarData.filter(r => {
+        const ci = toDate(r.check_in), co = toDate(r.check_out);
+        const d = new Date(calYear, calMonth, dayNum);
+        return ci <= d && co > d;
+      });
+
+      const isCheckIn = (r) => r.check_in === dateStr;
+      const isCheckOut = (r) => r.check_out === dateStr;
+
+      html += `<div class="bg-white min-h-[80px] p-1 ${isToday ? 'ring-2 ring-inset ring-blue-500' : ''}">`;
+      html += `<div class="text-xs font-medium mb-1 ${isToday ? 'text-blue-600' : 'text-gray-700'}">${dayNum}</div>`;
+
+      for (const r of dayRez) {
+        const c = COLORS[r.colorIdx % COLORS.length];
+        const cin = isCheckIn(r), cout = isCheckOut(r);
+        const label = cin ? `✈ ${r.guest}` : cout ? `⬜ ${r.guest}` : '';
+        const roundedL = cin ? 'rounded-l-md' : '';
+        const roundedR = cout ? 'rounded-r-md' : '';
+        html += `<div class="text-xs px-1 py-0.5 mb-0.5 truncate ${c.bar} ${c.text} ${roundedL} ${roundedR} cursor-pointer" title="${r.guest} | ${r.aptName} | ${r.check_in} → ${r.check_out}">`;
+        html += label || '&nbsp;';
+        html += `</div>`;
+      }
+
+      html += `</div>`;
+    }
+
+    html += `</div>`;
+    document.getElementById('cal-grid').innerHTML = html;
+  }
+
+  document.getElementById('cal-prev').addEventListener('click', () => {
+    calMonth--; if (calMonth < 0) { calMonth = 11; calYear--; }
+    renderCalendar();
+  });
+  document.getElementById('cal-next').addEventListener('click', () => {
+    calMonth++; if (calMonth > 11) { calMonth = 0; calYear++; }
+    renderCalendar();
+  });
+
+  renderCalendar();
+</script>
