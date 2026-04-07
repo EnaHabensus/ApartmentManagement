@@ -36,51 +36,86 @@ const filterStatus = Astro.url.searchParams.get('status') ?? 'active'; // active
 const success = Astro.url.searchParams.get('success');
 const error = Astro.url.searchParams.get('error');
 
-// Dohvati zadatke
+// Dohvati zadatke — admin klijent, bez joins
 let tasks: TaskWithDetails[] = [];
 
 if (allApartmentIds.length > 0) {
-  let query = supabase
-    .from('tasks')
-    .select(`
-      *,
-      apartments(name),
-      task_assignees(
-        user_id,
-        profiles(full_name, email)
-      )
-    `)
-    .order('due_date', { ascending: true })
-    .order('due_time', { ascending: true });
+  // Odredi koje apartment_ids gledamo
+  let aptIds: string[];
+  let staffTaskIds: string[] | null = null;
 
   if (isAdmin) {
-    // Admin vidi sve zadatke za svoje apartmane
-    const aptIds = filterApartmentId ? [filterApartmentId] : adminApartmentIds;
-    query = query.in('apartment_id', aptIds);
+    aptIds = filterApartmentId ? [filterApartmentId] : adminApartmentIds;
   } else {
+    aptIds = filterApartmentId ? [filterApartmentId] : allApartmentIds;
     // Staff vidi samo zadatke gdje je assignee
-    const { data: assignedTaskIds } = await supabase
+    const { data: assignedRows } = await adminSupabase
       .from('task_assignees')
       .select('task_id')
       .eq('user_id', user.id);
+    staffTaskIds = (assignedRows ?? []).map((a) => a.task_id);
+  }
 
-    const taskIds = (assignedTaskIds ?? []).map((a) => a.task_id);
-    if (taskIds.length === 0) {
-      tasks = [];
-    } else {
-      const aptIds = filterApartmentId ? [filterApartmentId] : allApartmentIds;
-      query = query.in('id', taskIds).in('apartment_id', aptIds);
+  if (staffTaskIds === null || staffTaskIds.length > 0) {
+    let tasksQuery = adminSupabase
+      .from('tasks')
+      .select('*')
+      .in('apartment_id', aptIds.length > 0 ? aptIds : ['none'])
+      .order('due_date', { ascending: true })
+      .order('due_time', { ascending: true });
+
+    if (staffTaskIds !== null) {
+      tasksQuery = tasksQuery.in('id', staffTaskIds);
+    }
+    if (filterStatus === 'active') {
+      tasksQuery = tasksQuery.eq('is_completed', false);
+    } else if (filterStatus === 'completed') {
+      tasksQuery = tasksQuery.eq('is_completed', true);
+    }
+
+    const { data: rawTasks } = await tasksQuery;
+
+    if (rawTasks && rawTasks.length > 0) {
+      const taskIds = rawTasks.map((t) => t.id);
+      const taskAptIds = [...new Set(rawTasks.map((t) => t.apartment_id))];
+
+      // Dohvati nazive apartmana
+      const { data: aptData } = await adminSupabase
+        .from('apartments')
+        .select('id, name')
+        .in('id', taskAptIds);
+      const aptMap = new Map((aptData ?? []).map((a) => [a.id, a]));
+
+      // Dohvati assignee-je
+      const { data: assigneeRows } = await adminSupabase
+        .from('task_assignees')
+        .select('task_id, user_id')
+        .in('task_id', taskIds);
+
+      const assigneeUserIds = [...new Set((assigneeRows ?? []).map((a) => a.user_id))];
+      const { data: assigneeProfiles } = assigneeUserIds.length > 0
+        ? await adminSupabase.from('profiles').select('id, full_name, email').in('id', assigneeUserIds)
+        : { data: [] };
+      const profileMap = new Map((assigneeProfiles ?? []).map((p) => [p.id, p]));
+
+      // Grupiraj assignee-je po task_id
+      const taskAssigneesMap = new Map<string, Array<{ user_id: string; profiles: { full_name: string; email: string } }>>();
+      for (const row of (assigneeRows ?? [])) {
+        const p = profileMap.get(row.user_id);
+        if (!taskAssigneesMap.has(row.task_id)) taskAssigneesMap.set(row.task_id, []);
+        taskAssigneesMap.get(row.task_id)!.push({
+          user_id: row.user_id,
+          profiles: { full_name: p?.full_name ?? 'Nepoznat', email: p?.email ?? '' },
+        });
+      }
+
+      tasks = rawTasks.map((t) => ({
+        ...t,
+        apartments: { name: aptMap.get(t.apartment_id)?.name ?? '—' },
+        task_assignees: taskAssigneesMap.get(t.id) ?? [],
+      })) as TaskWithDetails[];
     }
   }
-
-  if (filterStatus === 'active') {
-    query = query.eq('is_completed', false);
-  } else if (filterStatus === 'completed') {
-    query = query.eq('is_completed', true);
-  }
-
-  const { data } = await query;
-  tasks = (data ?? []) as TaskWithDetails[];
 }
 
 // Dohvati korisnike po apartmanu za multiselect u formi (samo admin)
