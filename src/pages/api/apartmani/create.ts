@@ -25,7 +25,7 @@ export const POST: APIRoute = async ({ request, cookies, redirect }) => {
   };
 
   if (!data.name || !data.address || !data.owner_name || !data.owner_oib) {
-    return redirect('/apartmani?error=Sva+obavezna+polja+moraju+biti+ispunjena.');
+    return redirect('/apartmani?error=' + encodeURIComponent('Sva obavezna polja moraju biti ispunjena.'));
   }
 
   const { data: apartment, error } = await supabase
@@ -35,7 +35,7 @@ export const POST: APIRoute = async ({ request, cookies, redirect }) => {
     .single();
 
   if (error || !apartment) {
-    return redirect('/apartmani?error=Greška+pri+kreiranju+apartmana.');
+    return redirect('/apartmani?error=' + encodeURIComponent('Greška pri kreiranju apartmana.'));
   }
 
   // Koristimo admin klijent jer user RLS nema INSERT politiku za apartment_users

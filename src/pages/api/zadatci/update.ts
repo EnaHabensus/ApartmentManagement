@@ -17,7 +17,7 @@ export const POST: APIRoute = async ({ request, cookies, redirect }) => {
     .eq('id', id)
     .single();
 
-  if (!existingTask) return redirect('/zadatci?error=Zadatak+nije+pronađen.');
+  if (!existingTask) return redirect('/zadatci?error=' + encodeURIComponent('Zadatak nije pronađen.'));
 
   // Provjeri admin ulogu na trenutnom apartmanu
   const { data: roleRow } = await supabase
@@ -28,7 +28,7 @@ export const POST: APIRoute = async ({ request, cookies, redirect }) => {
     .single();
 
   if (roleRow?.role !== 'admin') {
-    return redirect('/zadatci?error=Nemate+prava+za+uređivanje+zadatka.');
+    return redirect('/zadatci?error=' + encodeURIComponent('Nemate prava za uređivanje zadatka.'));
   }
 
   const title = formData.get('title')?.toString()?.trim();
@@ -66,7 +66,7 @@ export const POST: APIRoute = async ({ request, cookies, redirect }) => {
     .eq('id', id);
 
   if (error) {
-    return redirect('/zadatci?error=Greška+pri+ažuriranju+zadatka.');
+    return redirect('/zadatci?error=' + encodeURIComponent('Greška pri ažuriranju zadatka.'));
   }
 
   // Sync assignee-ji: brišemo stare, unosimo nove

@@ -32,7 +32,7 @@ export const POST: APIRoute = async ({ request, cookies, redirect }) => {
 
   // Ne dopusti brisanje sebe samog
   if (userId === user.id) {
-    return redirect('/korisnici?error=Ne+možete+ukloniti+sebe+s+apartmana');
+    return redirect('/korisnici?error=' + encodeURIComponent('Ne možete ukloniti sebe s apartmana'));
   }
 
   // Briši korisnika iz apartment_users (ne briše profil)

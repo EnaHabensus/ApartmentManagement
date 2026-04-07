@@ -17,7 +17,7 @@ export const POST: APIRoute = async ({ request, cookies, redirect }) => {
     .eq('id', id)
     .single();
 
-  if (!task) return redirect('/zadatci?error=Zadatak+nije+pronađen.');
+  if (!task) return redirect('/zadatci?error=' + encodeURIComponent('Zadatak nije pronađen.'));
 
   // Provjeri admin ulogu
   const { data: roleRow } = await supabase

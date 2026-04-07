@@ -42,7 +42,7 @@ export const POST: APIRoute = async ({ request, cookies, redirect }) => {
   });
 
   if (signUpError || !authData.user) {
-    return redirect(`/invite?token=${token}&error=Greška+pri+kreiranju+računa.`);
+    return redirect(`/invite?token=${token}&error=${encodeURIComponent('Greška pri kreiranju računa.')}`);
   }
 
   // Dodaj na apartmane

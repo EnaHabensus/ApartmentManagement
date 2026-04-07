@@ -46,7 +46,7 @@ export const POST: APIRoute = async ({ request, cookies, redirect }) => {
     .single();
 
   if (error || !task) {
-    return redirect('/zadatci?error=Greška+pri+kreiranju+zadatka.');
+    return redirect('/zadatci?error=' + encodeURIComponent('Greška pri kreiranju zadatka.'));
   }
 
   // Dodaj assignee-je

@@ -25,7 +25,7 @@ export const POST: APIRoute = async ({ request, cookies, redirect }) => {
   }
 
   if (!Array.isArray(apartmentRoles) || apartmentRoles.length === 0) {
-    return redirect('/korisnici?error=Nema+apartmana+za+ažuriranje');
+    return redirect('/korisnici?error=' + encodeURIComponent('Nema apartmana za ažuriranje'));
   }
 
   // Provjeri je li prijavljeni korisnik admin na svim apartmanima koje pokušava urediti
@@ -60,7 +60,7 @@ export const POST: APIRoute = async ({ request, cookies, redirect }) => {
         .eq('user_id', userId);
 
       if (error) {
-        return redirect(`/korisnici?error=Greška+pri+ažuriranju:+${encodeURIComponent(error.message)}`);
+        return redirect(`/korisnici?error=${encodeURIComponent('Greška pri ažuriranju: ' + error.message)}`);
       }
     } else {
       // Insert novog zapisa
@@ -74,7 +74,7 @@ export const POST: APIRoute = async ({ request, cookies, redirect }) => {
         });
 
       if (error) {
-        return redirect(`/korisnici?error=Greška+pri+dodavanju:+${encodeURIComponent(error.message)}`);
+        return redirect(`/korisnici?error=${encodeURIComponent('Greška pri dodavanju: ' + error.message)}`);
       }
     }
   }

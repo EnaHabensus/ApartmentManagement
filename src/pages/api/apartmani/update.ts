@@ -31,7 +31,7 @@ export const POST: APIRoute = async ({ request, cookies, redirect }) => {
     .update(data)
     .eq('id', id);
 
-  if (error) return redirect('/apartmani?error=Greška+pri+ažuriranju.');
+  if (error) return redirect('/apartmani?error=' + encodeURIComponent('Greška pri ažuriranju.'));
 
   return redirect('/apartmani?success=updated');
 };
