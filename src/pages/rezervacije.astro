@@ -80,6 +80,20 @@ if (tab === 'nadolazece') {
   reservations = reservations.sort((a, b) => b.check_in.localeCompare(a.check_in));
 }
 
+// KPI — dohvati sve rezervacije za statistiku (neovisno o tabu)
+const { data: allReservations } = await adminSupabase
+  .from('reservations')
+  .select('status, check_in, check_out')
+  .in('apartment_id', aptIds.length > 0 ? aptIds : ['none']);
+
+const kpi = {
+  sve: (allReservations ?? []).length,
+  uToku: (allReservations ?? []).filter((r) => getReservationStatus(r) === 'active').length,
+  nadolazece: (allReservations ?? []).filter((r) => getReservationStatus(r) === 'upcoming').length,
+  zavrsene: (allReservations ?? []).filter((r) => getReservationStatus(r) === 'completed').length,
+  otkazane: (allReservations ?? []).filter((r) => r.status === 'cancelled').length,
+};
+
 // Dohvati nazive apartmana za prikaz
 const aptMap = new Map(allApartments.map((a) => [a.id, a.name]));
 
@@ -137,6 +151,35 @@ const tabs = [
         <p class="text-sm text-red-600">{error}</p>
       </div>
     )}
+
+    <!-- KPI kartice -->
+    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
+      <a href={`/rezervacije?tab=sve${filterApartmentId ? `&apartment_id=${filterApartmentId}` : ''}`}
+        class={`card p-4 cursor-pointer hover:shadow-md transition-shadow ${tab === 'sve' ? 'ring-2 ring-blue-500' : ''}`}>
+        <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Ukupno</p>
+        <p class="text-3xl font-bold text-gray-900 mt-1">{kpi.sve}</p>
+      </a>
+      <a href={`/rezervacije?tab=u-toku${filterApartmentId ? `&apartment_id=${filterApartmentId}` : ''}`}
+        class={`card p-4 cursor-pointer hover:shadow-md transition-shadow ${tab === 'u-toku' ? 'ring-2 ring-green-500' : ''}`}>
+        <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">U toku</p>
+        <p class="text-3xl font-bold text-green-600 mt-1">{kpi.uToku}</p>
+      </a>
+      <a href={`/rezervacije?tab=nadolazece${filterApartmentId ? `&apartment_id=${filterApartmentId}` : ''}`}
+        class={`card p-4 cursor-pointer hover:shadow-md transition-shadow ${tab === 'nadolazece' ? 'ring-2 ring-blue-500' : ''}`}>
+        <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Nadolazeće</p>
+        <p class="text-3xl font-bold text-blue-600 mt-1">{kpi.nadolazece}</p>
+      </a>
+      <a href={`/rezervacije?tab=zavrsene${filterApartmentId ? `&apartment_id=${filterApartmentId}` : ''}`}
+        class={`card p-4 cursor-pointer hover:shadow-md transition-shadow ${tab === 'zavrsene' ? 'ring-2 ring-gray-400' : ''}`}>
+        <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Završene</p>
+        <p class="text-3xl font-bold text-gray-600 mt-1">{kpi.zavrsene}</p>
+      </a>
+      <a href={`/rezervacije?tab=otkazane${filterApartmentId ? `&apartment_id=${filterApartmentId}` : ''}`}
+        class={`card p-4 cursor-pointer hover:shadow-md transition-shadow ${tab === 'otkazane' ? 'ring-2 ring-red-500' : ''}`}>
+        <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Otkazane</p>
+        <p class="text-3xl font-bold text-red-500 mt-1">{kpi.otkazane}</p>
+      </a>
+    </div>
 
     <!-- Filteri i tabovi -->
     <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
