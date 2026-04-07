@@ -316,6 +316,7 @@ const tabs = [
                   <td class="table-cell text-right font-medium text-gray-900">{formatCurrency(neto > 0 ? neto : null)}</td>
                   <td class="table-cell text-center">
                     <button
+                      data-field="documents_received"
                       onclick={`toggleField('${r.id}', 'documents_received', ${r.documents_received})`}
                       class={`h-6 w-6 rounded-full border-2 flex items-center justify-center mx-auto transition-colors ${
                         r.documents_received
@@ -331,6 +332,7 @@ const tabs = [
                   </td>
                   <td class="table-cell text-center">
                     <button
+                      data-field="guests_registered"
                       onclick={`toggleField('${r.id}', 'guests_registered', ${r.guests_registered})`}
                       class={`h-6 w-6 rounded-full border-2 flex items-center justify-center mx-auto transition-colors ${
                         r.guests_registered
@@ -346,6 +348,7 @@ const tabs = [
                   </td>
                   <td class="table-cell text-center">
                     <button
+                      data-field="is_paid"
                       onclick={`toggleField('${r.id}', 'is_paid', ${r.is_paid})`}
                       class={`h-6 w-6 rounded-full border-2 flex items-center justify-center mx-auto transition-colors ${
                         r.is_paid
@@ -728,13 +731,7 @@ const tabs = [
         // Vizualno ažuriraj gumb bez reloada
         const row = document.getElementById(`row-${id}`);
         if (row) {
-          const fieldIndex: Record<string, number> = {
-            documents_received: 10,
-            guests_registered: 11,
-            is_paid: 12,
-          };
-          const colIdx = fieldIndex[field];
-          const btn = row.querySelectorAll('td')[colIdx]?.querySelector('button');
+          const btn = row.querySelector(`[data-field="${field}"]`) as HTMLButtonElement | null;
           if (btn) {
             const newVal = !currentValue;
             btn.setAttribute('onclick', `toggleField('${id}', '${field}', ${newVal})`);
