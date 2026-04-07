@@ -22,41 +22,44 @@ export const GET: APIRoute = async ({ request, cookies }) => {
     });
   }
 
-  // Provjeri da korisnik ima pristup ovom apartmanu
-  const { data: access } = await supabase
-    .from('apartment_users')
-    .select('role')
-    .eq('apartment_id', apartment_id)
-    .eq('user_id', user.id)
-    .single();
-
-  if (!access) {
-    return new Response(JSON.stringify({ error: 'Nemate pristup ovom apartmanu.' }), {
-      status: 403,
-      headers: { 'Content-Type': 'application/json' },
-    });
-  }
-
-  // Admin klijent za dohvat SVIH korisnika apartmana (uključujući admina)
   const adminSupabase = createSupabaseAdminClient();
-  const { data, error } = await adminSupabase
+
+  // Dohvati sve user_ids za taj apartman
+  const { data: auRows, error: auError } = await adminSupabase
     .from('apartment_users')
-    .select('user_id, role, profiles(id, full_name, email)')
+    .select('user_id, role')
     .eq('apartment_id', apartment_id);
 
-  if (error) {
-    return new Response(JSON.stringify({ error: error.message }), {
+  if (auError) {
+    return new Response(JSON.stringify({ error: auError.message }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' },
     });
   }
 
-  const users = (data ?? []).map((row) => {
-    const profile = row.profiles as unknown as { id: string; full_name: string; email: string } | null;
+  const userIds = (auRows ?? []).map((r) => r.user_id);
+
+  if (userIds.length === 0) {
+    return new Response(JSON.stringify([]), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  // Dohvati profile zasebno
+  const { data: profiles } = await adminSupabase
+    .from('profiles')
+    .select('id, full_name, email')
+    .in('id', userIds);
+
+  const profilesMap = new Map((profiles ?? []).map((p) => [p.id, p]));
+
+  const users = (auRows ?? []).map((row) => {
+    const p = profilesMap.get(row.user_id);
     return {
       id: row.user_id,
-      full_name: profile?.full_name ?? 'Nepoznat',
-      email: profile?.email ?? '',
+      full_name: p?.full_name ?? 'Nepoznat',
+      email: p?.email ?? '',
       role: row.role,
     };
   });

@@ -37,15 +37,23 @@ const adminApartments = adminApartmentData ?? [];
 // Filter po apartmanu
 const filterApartmentId = Astro.url.searchParams.get('apartment_id') ?? '';
 
-// Dohvati sve korisnike na adminovim apartmanima
-const query = adminSupabase
+// Dohvati apartment_users zapise (bez joins)
+const auQuery = adminSupabase
   .from('apartment_users')
-  .select('*, profiles(*), apartments(name)')
+  .select('id, apartment_id, user_id, role, added_at')
   .in('apartment_id', adminApartmentIds);
 
-const { data: apartmentUsers, error: auError } = filterApartmentId
-  ? await query.eq('apartment_id', filterApartmentId)
-  : await query;
+const { data: apartmentUsers } = filterApartmentId
+  ? await auQuery.eq('apartment_id', filterApartmentId)
+  : await auQuery;
+
+// Dohvati profile zasebno za sve user_ids
+const userIds = [...new Set((apartmentUsers ?? []).map((au) => au.user_id))];
+const { data: profilesData } = userIds.length > 0
+  ? await adminSupabase.from('profiles').select('id, full_name, email, has_logged_in').in('id', userIds)
+  : { data: [] };
+
+const profilesMap = new Map((profilesData ?? []).map((p) => [p.id, p]));
 
 // Grupiraj po korisnicima (uniqui korisnici s listom apartmana)
 const usersMap = new Map<string, {
@@ -56,17 +64,18 @@ const usersMap = new Map<string, {
   apartments: Array<{ apartment_id: string; apartment_name: string; role: string }>;
 }>();
 
-for (const au of (apartmentUsers ?? []) as ApartmentUserWithProfile[]) {
-  // profiles može biti null ako trigger nije kreirao profil — prikaži placeholder
-  const profileData = au.profiles as any;
-  const full_name = profileData?.full_name ?? 'Nepoznat korisnik';
-  const email = profileData?.email ?? '';
-  const has_logged_in = profileData?.has_logged_in ?? false;
+const apartmentsNameMap = new Map((adminApartments ?? []).map((a) => [a.id, a.name]));
+
+for (const au of (apartmentUsers ?? [])) {
+  const p = profilesMap.get(au.user_id);
+  const full_name = p?.full_name ?? 'Nepoznat korisnik';
+  const email = p?.email ?? '';
+  const has_logged_in = p?.has_logged_in ?? false;
 
   const existing = usersMap.get(au.user_id);
   const aptEntry = {
     apartment_id: au.apartment_id,
-    apartment_name: au.apartments?.name ?? '',
+    apartment_name: apartmentsNameMap.get(au.apartment_id) ?? '',
     role: au.role,
   };
   if (existing) {
