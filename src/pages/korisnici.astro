@@ -1,6 +1,6 @@
 ---
 import AppLayout from '../layouts/AppLayout.astro';
-import { createSupabaseServerClient } from '../lib/supabase';
+import { createSupabaseServerClient, createSupabaseAdminClient } from '../lib/supabase';
 import type { ApartmentUserWithProfile } from '../lib/types';
 
 const supabase = createSupabaseServerClient(Astro.request, Astro.cookies);
@@ -9,7 +9,7 @@ if (!user) return Astro.redirect('/login');
 
 const profile = Astro.locals.user!;
 
-// Dohvati apartmane gdje je prijavljeni korisnik admin
+// Dohvati apartmane gdje je prijavljeni korisnik admin (samo vlastite zapise — nema rekurzije)
 const { data: myApartmentUsers } = await supabase
   .from('apartment_users')
   .select('apartment_id, apartments(id, name)')
@@ -29,8 +29,9 @@ if (adminApartmentIds.length === 0) {
 // Filter po apartmanu
 const filterApartmentId = Astro.url.searchParams.get('apartment_id') ?? '';
 
-// Dohvati sve korisnike na adminovim apartmanima
-const query = supabase
+// Koristimo admin klijent za dohvat svih korisnika (izbjegavamo RLS rekurziju)
+const adminSupabase = createSupabaseAdminClient();
+const query = adminSupabase
   .from('apartment_users')
   .select('*, profiles(*), apartments(name)')
   .in('apartment_id', adminApartmentIds);
