@@ -190,6 +190,7 @@ const tabs = [
           <thead>
             <tr>
               <th class="table-head px-4 py-3 text-left">Gost</th>
+              <th class="table-head px-4 py-3 text-left">Status</th>
               <th class="table-head px-4 py-3 text-left">Apartman</th>
               <th class="table-head px-4 py-3 text-left">Check-in</th>
               <th class="table-head px-4 py-3 text-left whitespace-nowrap">Check-out</th>
@@ -201,7 +202,6 @@ const tabs = [
               <th class="table-head px-4 py-3 text-center">Dok.</th>
               <th class="table-head px-4 py-3 text-center">Prijava</th>
               <th class="table-head px-4 py-3 text-center">Plaćeno</th>
-              <th class="table-head px-4 py-3 text-left">Status</th>
               {isAdmin && <th class="table-head px-4 py-3"></th>}
             </tr>
           </thead>
@@ -214,6 +214,11 @@ const tabs = [
                   <td class="table-cell font-medium text-gray-900 whitespace-nowrap">
                     <div>{r.guest_name}</div>
                     {r.guest_phone && <div class="text-xs text-gray-400">{r.guest_phone}</div>}
+                  </td>
+                  <td class="table-cell">
+                    <span class={`badge ${STATUS_COLORS[computedStatus]}`}>
+                      {r.status === 'cancelled' ? 'Otkazana' : STATUS_LABELS[computedStatus]}
+                    </span>
                   </td>
                   <td class="table-cell">
                     <span class="inline-flex items-center rounded-md bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 ring-1 ring-inset ring-blue-700/10 whitespace-nowrap">
@@ -273,11 +278,6 @@ const tabs = [
                         <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
                       </svg>
                     </button>
-                  </td>
-                  <td class="table-cell">
-                    <span class={`badge ${STATUS_COLORS[computedStatus]}`}>
-                      {r.status === 'cancelled' ? 'Otkazana' : STATUS_LABELS[computedStatus]}
-                    </span>
                   </td>
                   {isAdmin && (
                     <td class="table-cell">
@@ -541,9 +541,9 @@ const tabs = [
         const row = document.getElementById(`row-${id}`);
         if (row) {
           const fieldIndex: Record<string, number> = {
-            documents_received: 9,
-            guests_registered: 10,
-            is_paid: 11,
+            documents_received: 10,
+            guests_registered: 11,
+            is_paid: 12,
           };
           const colIdx = fieldIndex[field];
           const btn = row.querySelectorAll('td')[colIdx]?.querySelector('button');
