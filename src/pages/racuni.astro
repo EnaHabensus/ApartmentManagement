@@ -124,20 +124,6 @@ const error = Astro.url.searchParams.get('error');
       </button>
     </div>
 
-    {success && (
-      <div class="mb-4 rounded-lg bg-green-50 border border-green-200 p-3">
-        <p class="text-sm text-green-700">
-          {success === 'settings_saved' && 'Postavke generiranja su uspješno spremljene.'}
-          {success === 'generated' && 'Račun je uspješno generiran.'}
-        </p>
-      </div>
-    )}
-
-    {error && (
-      <div class="mb-4 rounded-lg bg-red-50 border border-red-200 p-3">
-        <p class="text-sm text-red-600">{error}</p>
-      </div>
-    )}
 
     <!-- Gornji kontroli: filter + tabovi -->
     <div class="flex flex-col sm:flex-row sm:items-center gap-4 mb-6">
@@ -542,4 +528,11 @@ const error = Astro.url.searchParams.get('error');
   window.updateSettingsForm = updateSettingsForm;
   window.openConfirmModal = openConfirmModal;
   window.generateInvoice = generateInvoice;
+
+  const _p = new URLSearchParams(window.location.search);
+  const _s = _p.get('success'), _e = _p.get('error');
+  const _m: Record<string, string> = { settings_saved: 'Postavke su uspješno spremljene.', generated: 'Račun je uspješno generiran.' };
+  if (_s && _m[_s]) showToast(_m[_s], 'success');
+  if (_e) showToast(decodeURIComponent(_e), 'error');
+  if (_s || _e) { const _url = new URL(window.location.href); _url.searchParams.delete('success'); _url.searchParams.delete('error'); history.replaceState({}, '', _url.toString()); }
 </script>

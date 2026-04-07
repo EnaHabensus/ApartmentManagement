@@ -115,21 +115,6 @@ const error = Astro.url.searchParams.get('error');
       </button>
     </div>
 
-    {success && (
-      <div class="mb-4 rounded-lg bg-green-50 border border-green-200 p-3">
-        <p class="text-sm text-green-700">
-          {success === 'updated' && 'Korisnik je uspješno ažuriran.'}
-          {success === 'deleted' && 'Korisnik je uspješno uklonjen s apartmana.'}
-          {success === 'invited' && 'Pozivnica je uspješno poslana.'}
-        </p>
-      </div>
-    )}
-
-    {error && (
-      <div class="mb-4 rounded-lg bg-red-50 border border-red-200 p-3">
-        <p class="text-sm text-red-600">{error}</p>
-      </div>
-    )}
 
     <!-- Filter apartmana -->
     <div class="mb-4 flex items-center gap-3">
@@ -567,4 +552,18 @@ const error = Astro.url.searchParams.get('error');
   (window as any).openEditModal = openEditModal;
   (window as any).prepareEditSubmit = prepareEditSubmit;
   (window as any).confirmDelete = confirmDelete;
+
+  function showToast(message: string, type: 'success' | 'error' = 'success') {
+    let toast = document.getElementById('_toast');
+    if (!toast) { toast = document.createElement('div'); toast.id = '_toast'; document.body.appendChild(toast); }
+    toast.textContent = message;
+    toast.className = `fixed bottom-4 right-4 z-50 rounded-lg px-4 py-3 text-sm font-medium shadow-lg ${type === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'}`;
+    setTimeout(() => toast!.remove(), 3500);
+  }
+  const _p = new URLSearchParams(window.location.search);
+  const _s = _p.get('success'), _e = _p.get('error');
+  const _m: Record<string, string> = { updated: 'Korisnik je uspješno ažuriran.', deleted: 'Korisnik je uspješno uklonjen.', invited: 'Pozivnica je uspješno poslana.' };
+  if (_s && _m[_s]) showToast(_m[_s], 'success');
+  if (_e) showToast(decodeURIComponent(_e), 'error');
+  if (_s || _e) { const _url = new URL(window.location.href); _url.searchParams.delete('success'); _url.searchParams.delete('error'); history.replaceState({}, '', _url.toString()); }
 </script>
