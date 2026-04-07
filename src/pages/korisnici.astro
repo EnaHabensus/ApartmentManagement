@@ -56,9 +56,14 @@ console.log('DEBUG auQueryError:', auQueryError?.message);
 
 // Dohvati profile zasebno za sve user_ids
 const userIds = [...new Set((apartmentUsers ?? []).map((au) => au.user_id))];
-const { data: profilesData } = userIds.length > 0
+console.log('DEBUG userIds:', userIds);
+
+const { data: profilesData, error: profilesError } = userIds.length > 0
   ? await adminSupabase.from('profiles').select('id, full_name, email, has_logged_in').in('id', userIds)
-  : { data: [] };
+  : { data: [], error: null };
+
+console.log('DEBUG profilesData:', JSON.stringify(profilesData));
+console.log('DEBUG profilesError:', profilesError?.message);
 
 const profilesMap = new Map((profilesData ?? []).map((p) => [p.id, p]));
 
@@ -99,6 +104,7 @@ for (const au of (apartmentUsers ?? [])) {
 }
 
 const users = Array.from(usersMap.values());
+console.log('DEBUG users.length:', users.length, JSON.stringify(users));
 
 const success = Astro.url.searchParams.get('success');
 const error = Astro.url.searchParams.get('error');
