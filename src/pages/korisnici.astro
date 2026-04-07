@@ -153,24 +153,24 @@ const error = Astro.url.searchParams.get('error');
         </button>
       </div>
     ) : (
-      <div class="table-wrapper">
-        <table class="w-full text-sm">
+      <div class="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
+        <table class="text-sm" style="min-width: 700px; width: 100%;">
           <thead>
             <tr>
-              <th class="table-head">Ime i prezime</th>
-              <th class="table-head">Email</th>
-              <th class="table-head">Uloga</th>
-              <th class="table-head">Status</th>
-              <th class="table-head">Apartmani</th>
-              <th class="table-head">Akcije</th>
+              <th class="table-head px-4 py-3 text-left whitespace-nowrap">Ime i prezime</th>
+              <th class="table-head px-4 py-3 text-left">Email</th>
+              <th class="table-head px-4 py-3 text-left">Uloga</th>
+              <th class="table-head px-4 py-3 text-left">Status</th>
+              <th class="table-head px-4 py-3 text-left">Apartmani</th>
+              <th class="table-head px-4 py-3 text-left">Akcije</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-100">
             {users.map((u) => (
               <tr class="table-row">
-                <td class="table-cell font-medium text-gray-900">{u.full_name}</td>
-                <td class="table-cell text-gray-500">{u.email}</td>
-                <td class="table-cell">
+                <td class="table-cell px-4 py-3 font-medium text-gray-900 whitespace-nowrap">{u.full_name}</td>
+                <td class="table-cell px-4 py-3 text-gray-500">{u.email}</td>
+                <td class="table-cell px-4 py-3">
                   <div class="flex flex-wrap gap-1">
                     {u.apartments.map((apt) => (
                       <span class={`badge ${apt.role === 'admin' ? 'badge-blue' : 'badge-gray'}`}>
@@ -179,21 +179,21 @@ const error = Astro.url.searchParams.get('error');
                     ))}
                   </div>
                 </td>
-                <td class="table-cell">
+                <td class="table-cell px-4 py-3">
                   {u.has_logged_in ? (
                     <span class="badge badge-green">Aktivan</span>
                   ) : (
                     <span class="badge bg-yellow-100 text-yellow-700">Pozvan</span>
                   )}
                 </td>
-                <td class="table-cell">
+                <td class="table-cell px-4 py-3">
                   <div class="flex flex-wrap gap-1">
                     {u.apartments.map((apt) => (
-                      <span class="badge badge-gray">{apt.apartment_name}</span>
+                      <span class="inline-flex items-center rounded-md bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 ring-1 ring-inset ring-blue-700/10 whitespace-nowrap">{apt.apartment_name}</span>
                     ))}
                   </div>
                 </td>
-                <td class="table-cell">
+                <td class="table-cell px-4 py-3">
                   <div class="relative inline-block" x-data="{ open: false }">
                     <button
                       onclick={`toggleDropdown('dropdown-${u.user_id}')`}
