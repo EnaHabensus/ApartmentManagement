@@ -116,14 +116,21 @@ const { data: allCalRez } = await supabase
   .in('apartment_id', filteredAptIds.length ? filteredAptIds : ['none'])
   .eq('status', 'active');
 
-const aptNames = Object.fromEntries(apartments.map((a, i) => [a.id, { name: a.name, colorIdx: i }]));
+// Dohvati boje apartmana
+const { data: aptColorsData } = await supabase
+  .from('apartments')
+  .select('id, name, color')
+  .in('id', apartmentIds.length ? apartmentIds : ['none']);
+
+const aptColorLookup = Object.fromEntries((aptColorsData ?? []).map((a) => [a.id, { name: a.name, color: (a as any).color ?? '#3B82F6' }]));
+
 const calendarData = (allCalRez ?? []).map((r) => ({
   id: r.id,
   guest: r.guest_name,
   check_in: r.check_in,
   check_out: r.check_out,
-  aptName: aptNames[r.apartment_id]?.name ?? '',
-  colorIdx: aptNames[r.apartment_id]?.colorIdx ?? 0,
+  aptName: aptColorLookup[r.apartment_id]?.name ?? '',
+  color: aptColorLookup[r.apartment_id]?.color ?? '#3B82F6',
 }));
 
 function formatDate(d: string) {
@@ -263,13 +270,6 @@ function getStatus(r: { check_in: string; check_out: string }) {
 </AppLayout>
 
 <script define:vars={{ calendarData }}>
-  const COLORS = [
-    { bg: 'bg-blue-100', text: 'text-blue-800', bar: 'bg-blue-200', border: 'border-blue-300' },
-    { bg: 'bg-purple-100', text: 'text-purple-800', bar: 'bg-purple-200', border: 'border-purple-300' },
-    { bg: 'bg-green-100', text: 'text-green-800', bar: 'bg-green-200', border: 'border-green-300' },
-    { bg: 'bg-orange-100', text: 'text-orange-800', bar: 'bg-orange-200', border: 'border-orange-300' },
-    { bg: 'bg-pink-100', text: 'text-pink-800', bar: 'bg-pink-200', border: 'border-pink-300' },
-  ];
   const DAYS = ['Pon', 'Uto', 'Sri', 'Čet', 'Pet', 'Sub', 'Ned'];
   const MONTHS = ['Siječanj','Veljača','Ožujak','Travanj','Svibanj','Lipanj','Srpanj','Kolovoz','Rujan','Listopad','Studeni','Prosinac'];
 
@@ -322,12 +322,11 @@ function getStatus(r: { check_in: string; check_out: string }) {
       html += `<div class="text-xs font-medium mb-1 ${isToday ? 'text-blue-600' : 'text-gray-700'}">${dayNum}</div>`;
 
       for (const r of dayRez) {
-        const c = COLORS[r.colorIdx % COLORS.length];
+        const color = r.color || '#3B82F6';
         const cin = isCheckIn(r), cout = isCheckOut(r);
         const label = cin ? `✈ ${r.guest}` : cout ? `⬜ ${r.guest}` : '';
-        const roundedL = cin ? 'rounded-l-md' : '';
-        const roundedR = cout ? 'rounded-r-md' : '';
-        html += `<div class="text-xs px-1 py-0.5 mb-0.5 truncate ${c.bar} ${c.text} ${roundedL} ${roundedR} cursor-pointer" title="${r.guest} | ${r.aptName} | ${r.check_in} → ${r.check_out}">`;
+        const borderRadius = cin && cout ? 'border-radius:4px' : cin ? 'border-radius:4px 0 0 4px' : cout ? 'border-radius:0 4px 4px 0' : 'border-radius:0';
+        html += `<div class="text-xs px-1 py-0.5 mb-0.5 truncate cursor-pointer" style="background:${color}25;color:${color};${borderRadius}" title="${r.guest} | ${r.aptName} | ${r.check_in} → ${r.check_out}">`;
         html += label || '&nbsp;';
         html += `</div>`;
       }

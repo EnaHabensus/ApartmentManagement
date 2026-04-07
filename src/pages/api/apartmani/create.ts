@@ -21,6 +21,7 @@ export const POST: APIRoute = async ({ request, cookies, redirect }) => {
     owner_postal_code: formData.get('owner_postal_code')?.toString()?.trim(),
     owner_city: formData.get('owner_city')?.toString()?.trim(),
     owner_country: formData.get('owner_country')?.toString()?.trim(),
+    color: formData.get('color')?.toString() || '#3B82F6',
     created_by: user.id,
   };
 

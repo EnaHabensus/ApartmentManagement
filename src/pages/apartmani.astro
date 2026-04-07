@@ -8,6 +8,19 @@ if (!user) return Astro.redirect('/login');
 
 const profile = Astro.locals.user!;
 
+const APT_COLORS = [
+  { hex: '#3B82F6', label: 'Plava' },
+  { hex: '#8B5CF6', label: 'Ljubičasta' },
+  { hex: '#10B981', label: 'Zelena' },
+  { hex: '#F59E0B', label: 'Narančasta' },
+  { hex: '#EC4899', label: 'Roza' },
+  { hex: '#EF4444', label: 'Crvena' },
+  { hex: '#14B8A6', label: 'Tirkizna' },
+  { hex: '#6366F1', label: 'Indigo' },
+  { hex: '#F97316', label: 'Koraljna' },
+  { hex: '#84CC16', label: 'Limeta' },
+];
+
 // Dohvati apartmane gdje je korisnik admin
 const { data: apartmentUsers } = await supabase
   .from('apartment_users')
@@ -162,6 +175,23 @@ const error = Astro.url.searchParams.get('error');
           </div>
         </div>
 
+        <div class="border-t border-gray-100 pt-5">
+          <label class="label mb-2">Boja apartmana</label>
+          <input type="hidden" name="color" id="add-color" value="#3B82F6" />
+          <div class="flex flex-wrap gap-2">
+            {APT_COLORS.map((c) => (
+              <button
+                type="button"
+                title={c.label}
+                onclick={`selectColor('add-color', '${c.hex}', this)`}
+                class="color-swatch h-8 w-8 rounded-full border-2 border-transparent hover:scale-110 transition-transform"
+                style={`background-color: ${c.hex}`}
+                data-color={c.hex}
+              ></button>
+            ))}
+          </div>
+        </div>
+
         <div class="flex justify-end gap-3 pt-2">
           <button type="button" onclick="document.getElementById('modal-add').classList.add('hidden')" class="btn-secondary">
             Odustani
@@ -241,6 +271,23 @@ const error = Astro.url.searchParams.get('error');
           </div>
         </div>
 
+        <div class="border-t border-gray-100 pt-5">
+          <label class="label mb-2">Boja apartmana</label>
+          <input type="hidden" name="color" id="edit-color" value="#3B82F6" />
+          <div class="flex flex-wrap gap-2">
+            {APT_COLORS.map((c) => (
+              <button
+                type="button"
+                title={c.label}
+                onclick={`selectColor('edit-color', '${c.hex}', this)`}
+                class="color-swatch h-8 w-8 rounded-full border-2 border-transparent hover:scale-110 transition-transform"
+                style={`background-color: ${c.hex}`}
+                data-color={c.hex}
+              ></button>
+            ))}
+          </div>
+        </div>
+
         <div class="flex justify-end gap-3 pt-2">
           <button type="button" onclick="document.getElementById('modal-edit').classList.add('hidden')" class="btn-secondary">
             Odustani
@@ -277,12 +324,35 @@ const error = Astro.url.searchParams.get('error');
     }
   }
 
+  function selectColor(inputId: string, hex: string, btn: HTMLElement) {
+    (document.getElementById(inputId) as HTMLInputElement).value = hex;
+    // Reset svi gumbi u istom containeru
+    btn.closest('.flex')?.querySelectorAll('.color-swatch').forEach((b) => {
+      (b as HTMLElement).style.borderColor = 'transparent';
+      (b as HTMLElement).style.boxShadow = 'none';
+    });
+    btn.style.borderColor = '#1f2937';
+    btn.style.boxShadow = '0 0 0 2px white, 0 0 0 4px ' + hex;
+  }
+
   function openEditModal(apt: Record<string, string>) {
     const fields = ['id','name','address','postal_code','city','country','check_in_time','check_out_time',
                     'owner_name','owner_oib','owner_address','owner_postal_code','owner_city','owner_country'];
     fields.forEach((f) => {
       const el = document.getElementById(`edit-${f}`) as HTMLInputElement;
       if (el) el.value = apt[f] ?? '';
+    });
+    // Postavi boju
+    const color = apt['color'] || '#3B82F6';
+    (document.getElementById('edit-color') as HTMLInputElement).value = color;
+    document.querySelectorAll('#modal-edit .color-swatch').forEach((b) => {
+      const btn = b as HTMLElement;
+      btn.style.borderColor = 'transparent';
+      btn.style.boxShadow = 'none';
+      if (btn.dataset.color === color) {
+        btn.style.borderColor = '#1f2937';
+        btn.style.boxShadow = '0 0 0 2px white, 0 0 0 4px ' + color;
+      }
     });
     document.getElementById('modal-edit')?.classList.remove('hidden');
   }
@@ -296,6 +366,7 @@ const error = Astro.url.searchParams.get('error');
   (window as any).closeModalOnOverlay = closeModalOnOverlay;
   (window as any).openEditModal = openEditModal;
   (window as any).confirmDelete = confirmDelete;
+  (window as any).selectColor = selectColor;
 
   function showToast(message: string, type: 'success' | 'error' = 'success') {
     let toast = document.getElementById('_toast');
