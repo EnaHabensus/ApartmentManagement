@@ -34,7 +34,7 @@ const allApartments = apartmentsData ?? [];
 const adminApartments = allApartments.filter((a) => adminApartmentIds.includes(a.id));
 
 // URL parametri
-const tab = Astro.url.searchParams.get('tab') ?? 'nadolazece';
+const tab = Astro.url.searchParams.get('tab') ?? 'sve';
 const filterApartmentId = Astro.url.searchParams.get('apartment_id') ?? '';
 const success = Astro.url.searchParams.get('success');
 const error = Astro.url.searchParams.get('error');
@@ -94,9 +94,9 @@ function formatCurrency(n: number | null): string {
 }
 
 const tabs = [
-  { key: 'nadolazece', label: 'Nadolazeće' },
-  { key: 'u-toku', label: 'U toku' },
   { key: 'sve', label: 'Sve' },
+  { key: 'u-toku', label: 'U toku' },
+  { key: 'nadolazece', label: 'Nadolazeće' },
   { key: 'zavrsene', label: 'Završene' },
   { key: 'otkazane', label: 'Otkazane' },
 ];
@@ -185,8 +185,8 @@ const tabs = [
         <p class="text-gray-500">Nema rezervacija u ovoj kategoriji.</p>
       </div>
     ) : (
-      <div class="table-wrapper overflow-x-auto">
-        <table class="w-full text-sm min-w-[900px]">
+      <div class="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
+        <table class="text-sm" style="min-width: 1200px; width: 100%;">
           <thead>
             <tr>
               <th class="table-head px-4 py-3 text-left">Gost</th>
@@ -215,7 +215,11 @@ const tabs = [
                     <div>{r.guest_name}</div>
                     {r.guest_phone && <div class="text-xs text-gray-400">{r.guest_phone}</div>}
                   </td>
-                  <td class="table-cell text-gray-500">{aptMap.get(r.apartment_id) ?? '—'}</td>
+                  <td class="table-cell">
+                    <span class="inline-flex items-center rounded-md bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 ring-1 ring-inset ring-blue-700/10 whitespace-nowrap">
+                      {aptMap.get(r.apartment_id) ?? '—'}
+                    </span>
+                  </td>
                   <td class="table-cell text-gray-700 whitespace-nowrap">{formatDate(r.check_in)}</td>
                   <td class="table-cell text-gray-700 whitespace-nowrap">{formatDate(r.check_out)}</td>
                   <td class="table-cell text-gray-500 text-center">{r.num_guests}</td>
