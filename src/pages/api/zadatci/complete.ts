@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { createSupabaseServerClient } from '../../../lib/supabase';
+import { createSupabaseServerClient, createSupabaseAdminClient } from '../../../lib/supabase';
 
 export const POST: APIRoute = async ({ request, cookies }) => {
   const supabase = createSupabaseServerClient(request, cookies);
@@ -30,8 +30,10 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     });
   }
 
+  const adminSupabase = createSupabaseAdminClient();
+
   // Provjeri da korisnik ima pristup zadatku (admin ili assignee)
-  const { data: task } = await supabase
+  const { data: task } = await adminSupabase
     .from('tasks')
     .select('apartment_id, is_completed')
     .eq('id', id)
@@ -46,13 +48,13 @@ export const POST: APIRoute = async ({ request, cookies }) => {
 
   // Provjeri je li korisnik admin ili assignee za ovaj zadatak
   const [{ data: roleRow }, { data: assigneeRow }] = await Promise.all([
-    supabase
+    adminSupabase
       .from('apartment_users')
       .select('role')
       .eq('apartment_id', task.apartment_id)
       .eq('user_id', user.id)
       .single(),
-    supabase
+    adminSupabase
       .from('task_assignees')
       .select('user_id')
       .eq('task_id', id)
@@ -67,7 +69,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     });
   }
 
-  const { error } = await supabase
+  const { error } = await adminSupabase
     .from('tasks')
     .update({
       is_completed: true,

@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { createSupabaseServerClient } from '../../../lib/supabase';
+import { createSupabaseServerClient, createSupabaseAdminClient } from '../../../lib/supabase';
 
 export const POST: APIRoute = async ({ request, cookies, redirect }) => {
   const supabase = createSupabaseServerClient(request, cookies);
@@ -10,8 +10,10 @@ export const POST: APIRoute = async ({ request, cookies, redirect }) => {
   const apartment_id = formData.get('apartment_id')?.toString();
   if (!apartment_id) return redirect('/zadatci?error=Apartman+je+obavezan.');
 
+  const adminSupabase = createSupabaseAdminClient();
+
   // Provjeri admin ulogu na odabranom apartmanu
-  const { data: roleRow } = await supabase
+  const { data: roleRow } = await adminSupabase
     .from('apartment_users')
     .select('role')
     .eq('apartment_id', apartment_id)
@@ -31,7 +33,7 @@ export const POST: APIRoute = async ({ request, cookies, redirect }) => {
     return redirect('/zadatci?error=Naziv+i+datum+su+obavezni.');
   }
 
-  const { data: task, error } = await supabase
+  const { data: task, error } = await adminSupabase
     .from('tasks')
     .insert({
       apartment_id,
@@ -46,7 +48,7 @@ export const POST: APIRoute = async ({ request, cookies, redirect }) => {
     .single();
 
   if (error || !task) {
-    return redirect('/zadatci?error=' + encodeURIComponent('Greška pri kreiranju zadatka.'));
+    return redirect('/zadatci?error=' + encodeURIComponent('Greška pri kreiranju zadatka: ' + (error?.message ?? 'nepoznata greška')));
   }
 
   // Dodaj assignee-je
@@ -58,7 +60,7 @@ export const POST: APIRoute = async ({ request, cookies, redirect }) => {
       assignee_ids = [];
     }
     if (assignee_ids.length > 0) {
-      await supabase.from('task_assignees').insert(
+      await adminSupabase.from('task_assignees').insert(
         assignee_ids.map((uid) => ({
           task_id: task.id,
           user_id: uid,

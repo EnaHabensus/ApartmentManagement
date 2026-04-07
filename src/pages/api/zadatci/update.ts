@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { createSupabaseServerClient } from '../../../lib/supabase';
+import { createSupabaseServerClient, createSupabaseAdminClient } from '../../../lib/supabase';
 
 export const POST: APIRoute = async ({ request, cookies, redirect }) => {
   const supabase = createSupabaseServerClient(request, cookies);
@@ -10,8 +10,10 @@ export const POST: APIRoute = async ({ request, cookies, redirect }) => {
   const id = formData.get('id')?.toString();
   if (!id) return redirect('/zadatci?error=ID+zadatka+nedostaje.');
 
+  const adminSupabase = createSupabaseAdminClient();
+
   // Dohvati zadatak da znamo trenutni apartment_id
-  const { data: existingTask } = await supabase
+  const { data: existingTask } = await adminSupabase
     .from('tasks')
     .select('apartment_id')
     .eq('id', id)
@@ -20,7 +22,7 @@ export const POST: APIRoute = async ({ request, cookies, redirect }) => {
   if (!existingTask) return redirect('/zadatci?error=' + encodeURIComponent('Zadatak nije pronađen.'));
 
   // Provjeri admin ulogu na trenutnom apartmanu
-  const { data: roleRow } = await supabase
+  const { data: roleRow } = await adminSupabase
     .from('apartment_users')
     .select('role')
     .eq('apartment_id', existingTask.apartment_id)
@@ -43,7 +45,7 @@ export const POST: APIRoute = async ({ request, cookies, redirect }) => {
 
   // Ako je promijenjen apartman, provjeri da ima admin ulogu i na novom
   if (apartment_id !== existingTask.apartment_id) {
-    const { data: newRoleRow } = await supabase
+    const { data: newRoleRow } = await adminSupabase
       .from('apartment_users')
       .select('role')
       .eq('apartment_id', apartment_id)
@@ -55,7 +57,7 @@ export const POST: APIRoute = async ({ request, cookies, redirect }) => {
     }
   }
 
-  const { error } = await supabase
+  const { error } = await adminSupabase
     .from('tasks')
     .update({
       title,
@@ -70,7 +72,7 @@ export const POST: APIRoute = async ({ request, cookies, redirect }) => {
   }
 
   // Sync assignee-ji: brišemo stare, unosimo nove
-  await supabase.from('task_assignees').delete().eq('task_id', id);
+  await adminSupabase.from('task_assignees').delete().eq('task_id', id);
 
   if (assignee_ids_raw) {
     let assignee_ids: string[] = [];
@@ -80,7 +82,7 @@ export const POST: APIRoute = async ({ request, cookies, redirect }) => {
       assignee_ids = [];
     }
     if (assignee_ids.length > 0) {
-      await supabase.from('task_assignees').insert(
+      await adminSupabase.from('task_assignees').insert(
         assignee_ids.map((uid) => ({
           task_id: id,
           user_id: uid,

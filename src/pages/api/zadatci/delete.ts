@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { createSupabaseServerClient } from '../../../lib/supabase';
+import { createSupabaseServerClient, createSupabaseAdminClient } from '../../../lib/supabase';
 
 export const POST: APIRoute = async ({ request, cookies, redirect }) => {
   const supabase = createSupabaseServerClient(request, cookies);
@@ -10,8 +10,10 @@ export const POST: APIRoute = async ({ request, cookies, redirect }) => {
   const id = formData.get('id')?.toString();
   if (!id) return redirect('/zadatci?error=ID+zadatka+nedostaje.');
 
+  const adminSupabase = createSupabaseAdminClient();
+
   // Dohvati zadatak da znamo apartment_id
-  const { data: task } = await supabase
+  const { data: task } = await adminSupabase
     .from('tasks')
     .select('apartment_id')
     .eq('id', id)
@@ -20,7 +22,7 @@ export const POST: APIRoute = async ({ request, cookies, redirect }) => {
   if (!task) return redirect('/zadatci?error=' + encodeURIComponent('Zadatak nije pronađen.'));
 
   // Provjeri admin ulogu
-  const { data: roleRow } = await supabase
+  const { data: roleRow } = await adminSupabase
     .from('apartment_users')
     .select('role')
     .eq('apartment_id', task.apartment_id)
@@ -32,8 +34,8 @@ export const POST: APIRoute = async ({ request, cookies, redirect }) => {
   }
 
   // Briši assignee-je pa zadatak
-  await supabase.from('task_assignees').delete().eq('task_id', id);
-  await supabase.from('tasks').delete().eq('id', id);
+  await adminSupabase.from('task_assignees').delete().eq('task_id', id);
+  await adminSupabase.from('tasks').delete().eq('id', id);
 
   return redirect('/zadatci?success=deleted');
 };
