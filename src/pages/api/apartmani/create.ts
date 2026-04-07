@@ -28,7 +28,10 @@ export const POST: APIRoute = async ({ request, cookies, redirect }) => {
     return redirect('/apartmani?error=' + encodeURIComponent('Sva obavezna polja moraju biti ispunjena.'));
   }
 
-  const { data: apartment, error } = await supabase
+  // Koristimo admin klijent da zaobiđemo RLS za server-side operacije
+  const adminSupabase = createSupabaseAdminClient();
+
+  const { data: apartment, error } = await adminSupabase
     .from('apartments')
     .insert(data)
     .select()
@@ -37,9 +40,6 @@ export const POST: APIRoute = async ({ request, cookies, redirect }) => {
   if (error || !apartment) {
     return redirect('/apartmani?error=' + encodeURIComponent('DB greška: ' + (error?.message ?? 'apartment null')));
   }
-
-  // Koristimo admin klijent jer user RLS nema INSERT politiku za apartment_users
-  const adminSupabase = createSupabaseAdminClient();
 
   await adminSupabase.from('apartment_users').insert({
     apartment_id: apartment.id,

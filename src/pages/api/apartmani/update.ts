@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { createSupabaseServerClient } from '../../../lib/supabase';
+import { createSupabaseServerClient, createSupabaseAdminClient } from '../../../lib/supabase';
 
 export const POST: APIRoute = async ({ request, cookies, redirect }) => {
   const supabase = createSupabaseServerClient(request, cookies);
@@ -8,7 +8,19 @@ export const POST: APIRoute = async ({ request, cookies, redirect }) => {
 
   const formData = await request.formData();
   const id = formData.get('id')?.toString();
-  if (!id) return redirect('/apartmani?error=ID+apartmana+nedostaje.');
+  if (!id) return redirect('/apartmani?error=' + encodeURIComponent('ID apartmana nedostaje.'));
+
+  // Provjeri admin ulogu (korisnik može čitati vlastite apartment_users zapise)
+  const { data: role } = await supabase
+    .from('apartment_users')
+    .select('role')
+    .eq('apartment_id', id)
+    .eq('user_id', user.id)
+    .single();
+
+  if (role?.role !== 'admin') {
+    return redirect('/apartmani?error=' + encodeURIComponent('Nemate prava za uređivanje.'));
+  }
 
   const data = {
     name: formData.get('name')?.toString()?.trim(),
@@ -26,7 +38,8 @@ export const POST: APIRoute = async ({ request, cookies, redirect }) => {
     owner_country: formData.get('owner_country')?.toString()?.trim(),
   };
 
-  const { error } = await supabase
+  const adminSupabase = createSupabaseAdminClient();
+  const { error } = await adminSupabase
     .from('apartments')
     .update(data)
     .eq('id', id);

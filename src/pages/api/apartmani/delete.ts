@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { createSupabaseServerClient } from '../../../lib/supabase';
+import { createSupabaseServerClient, createSupabaseAdminClient } from '../../../lib/supabase';
 
 export const POST: APIRoute = async ({ request, cookies, redirect }) => {
   const supabase = createSupabaseServerClient(request, cookies);
@@ -8,9 +8,9 @@ export const POST: APIRoute = async ({ request, cookies, redirect }) => {
 
   const formData = await request.formData();
   const id = formData.get('id')?.toString();
-  if (!id) return redirect('/apartmani?error=ID+apartmana+nedostaje.');
+  if (!id) return redirect('/apartmani?error=' + encodeURIComponent('ID apartmana nedostaje.'));
 
-  // Provjeri je li admin
+  // Provjeri admin ulogu
   const { data: role } = await supabase
     .from('apartment_users')
     .select('role')
@@ -19,17 +19,16 @@ export const POST: APIRoute = async ({ request, cookies, redirect }) => {
     .single();
 
   if (role?.role !== 'admin') {
-    return redirect('/apartmani?error=Nemate+prava+za+brisanje.');
+    return redirect('/apartmani?error=' + encodeURIComponent('Nemate prava za brisanje.'));
   }
 
-  // Soft delete apartmana
-  await supabase
-    .from('apartments')
-    .update({ is_deleted: true })
-    .eq('id', id);
+  const adminSupabase = createSupabaseAdminClient();
 
-  // Otkaži sve rezervacije
-  await supabase
+  // Soft delete apartmana
+  await adminSupabase.from('apartments').update({ is_deleted: true }).eq('id', id);
+
+  // Otkaži sve aktivne rezervacije
+  await adminSupabase
     .from('reservations')
     .update({ status: 'cancelled' })
     .eq('apartment_id', id)
