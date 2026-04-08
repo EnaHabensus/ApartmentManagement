@@ -23,12 +23,13 @@ const allApartmentIds = (myApartmentUsers ?? []).map((au) => au.apartment_id);
 // Dohvati nazive apartmana zasebno
 const { data: apartmentsData } = await adminSupabase
   .from('apartments')
-  .select('id, name')
+  .select('id, name, color')
   .in('id', allApartmentIds.length > 0 ? allApartmentIds : ['none'])
   .eq('is_deleted', false);
 
 const adminApartments = (apartmentsData ?? []).filter((a) => adminApartmentIds.includes(a.id));
 const allUserApartments = apartmentsData ?? [];
+const aptColorMap = new Map((apartmentsData ?? []).map((a) => [a.id, (a as any).color as string ?? '#3B82F6']));
 
 // URL parametri za filtriranje
 const filterApartmentId = Astro.url.searchParams.get('apartment_id') ?? '';
@@ -249,7 +250,19 @@ function getInitials(name: string): string {
                     {task.title}
                   </span>
                 </td>
-                <td class="table-cell text-gray-500">{(task.apartments as any)?.name ?? '—'}</td>
+                <td class="table-cell">
+                  {(() => {
+                    const color = aptColorMap.get(task.apartment_id) ?? '#3B82F6';
+                    return (
+                      <span
+                        class="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium whitespace-nowrap"
+                        style={`background-color: ${color}20; color: ${color}; box-shadow: inset 0 0 0 1px ${color}40`}
+                      >
+                        {(task.apartments as any)?.name ?? '—'}
+                      </span>
+                    );
+                  })()}
+                </td>
                 <td class="table-cell text-gray-500 whitespace-nowrap">
                   {formatDateTime(task.due_date, task.due_time)}
                 </td>
@@ -655,7 +668,7 @@ function getInitials(name: string): string {
   const _params = new URLSearchParams(window.location.search);
   const _success = _params.get('success');
   const _error = _params.get('error');
-  const _msgs: Record<string, string> = { created: 'Zadatak je uspješno kreiran.', updated: 'Zadatak je uspješno ažuriran.', deleted: 'Zadatak je uspješno obrisan.' };
+  const _msgs = { created: 'Zadatak je uspješno kreiran.', updated: 'Zadatak je uspješno ažuriran.', deleted: 'Zadatak je uspješno obrisan.' };
   if (_success && _msgs[_success]) showToast(_msgs[_success], 'success');
   if (_error) showToast(decodeURIComponent(_error), 'error');
   if (_success || _error) {
