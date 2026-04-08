@@ -182,31 +182,37 @@ function formatCurrency(n: number | null): string {
                   <td class="table-cell text-right font-medium text-gray-900">{formatCurrency(r.amount_gross)}</td>
                   <td class="table-cell">
                     {invoice
-                      ? <span class="font-medium text-gray-900">{invoice.invoice_number_display}</span>
+                      ? invoice.pdf_url
+                        ? (
+                          <a
+                            href={invoice.pdf_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            class="font-medium text-blue-600 hover:text-blue-800 hover:underline"
+                          >{invoice.invoice_number_display}</a>
+                        )
+                        : <span class="font-medium text-gray-900">{invoice.invoice_number_display}</span>
                       : <span class="text-gray-400">—</span>
                     }
                   </td>
                   <td class="table-cell">
                     <div class="flex items-center gap-1 flex-wrap">
-                      {!invoice && (
+                      {invoice ? (
                         <button
-                          onclick={`openGenerateModal('${r.id}', '${r.guest_name.replace(/'/g, "\\'")}', ${JSON.stringify(lastInvoiceNote)})`}
-                          class="btn-primary text-xs px-2 py-1 whitespace-nowrap"
-                        >Generiraj račun</button>
-                      )}
-                      {invoice && invoice.pdf_url && (
-                        <a
-                          href={invoice.pdf_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          class="btn-ghost text-xs px-2 py-1 text-blue-600 hover:text-blue-800 whitespace-nowrap"
-                        >Preuzmi PDF</a>
-                      )}
-                      {invoice && (
-                        <button
-                          onclick={`openUploadModal('${invoice.id}', '${r.id}')`}
-                          class="btn-ghost text-xs px-2 py-1 whitespace-nowrap"
-                        >{invoice.pdf_url ? 'Zamijeni PDF' : 'Upload PDF'}</button>
+                          onclick={`confirmDelete('${invoice.id}')`}
+                          class="btn-ghost text-xs px-2 py-1 whitespace-nowrap text-red-600 hover:text-red-800 hover:bg-red-50"
+                        >Obriši račun</button>
+                      ) : (
+                        <>
+                          <button
+                            onclick={`openGenerateModal('${r.id}', '${r.guest_name.replace(/'/g, "\\'")}', ${JSON.stringify(lastInvoiceNote)})`}
+                            class="btn-primary text-xs px-2 py-1 whitespace-nowrap"
+                          >Generiraj račun</button>
+                          <button
+                            onclick={`openUploadModal('__new__', '${r.id}')`}
+                            class="btn-ghost text-xs px-2 py-1 whitespace-nowrap"
+                          >Uploadaj račun</button>
+                        </>
                       )}
                     </div>
                   </td>
@@ -249,10 +255,15 @@ function formatCurrency(n: number | null): string {
   <!-- Modal: Upload PDF -->
   <div id="modal-upload" class="hidden modal-overlay" onclick="closeModalOnOverlay(event, 'modal-upload')">
     <div class="modal-content p-6" onclick="event.stopPropagation()">
-      <h2 class="text-lg font-semibold text-gray-900 mb-4">Upload PDF računa</h2>
+      <h2 class="text-lg font-semibold text-gray-900 mb-4">Uploadaj PDF računa</h2>
 
       <div id="upload-error" class="hidden rounded-lg bg-red-50 border border-red-200 p-3 mb-4">
         <p class="text-sm text-red-600" id="upload-error-text"></p>
+      </div>
+
+      <div id="upload-number-wrap" class="mb-4 hidden">
+        <label class="label">Broj računa *</label>
+        <input id="upload-invoice-number" type="text" class="input" placeholder="npr. 2024-001" />
       </div>
 
       <div class="mb-4">
@@ -263,6 +274,21 @@ function formatCurrency(n: number | null): string {
       <div class="flex justify-end gap-3">
         <button type="button" onclick="document.getElementById('modal-upload').classList.add('hidden')" class="btn-secondary">Odustani</button>
         <button type="button" id="upload-submit" onclick="submitUpload()" class="btn-primary">Upload</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Potvrda brisanja -->
+  <div id="modal-delete" class="hidden modal-overlay" onclick="closeModalOnOverlay(event, 'modal-delete')">
+    <div class="modal-content p-6" onclick="event.stopPropagation()" style="max-width: 400px;">
+      <h2 class="text-lg font-semibold text-gray-900 mb-2">Obriši račun</h2>
+      <p class="text-sm text-gray-500 mb-6">Jeste li sigurni da želite obrisati ovaj račun? PDF datoteka će biti trajno uklonjena.</p>
+      <div id="delete-error" class="hidden rounded-lg bg-red-50 border border-red-200 p-3 mb-4">
+        <p class="text-sm text-red-600" id="delete-error-text"></p>
+      </div>
+      <div class="flex justify-end gap-3">
+        <button type="button" onclick="document.getElementById('modal-delete').classList.add('hidden')" class="btn-secondary">Odustani</button>
+        <button type="button" id="delete-submit" onclick="submitDelete()" class="btn-danger">Obriši</button>
       </div>
     </div>
   </div>
@@ -339,7 +365,15 @@ function formatCurrency(n: number | null): string {
     _uploadInvoiceId = invoiceId;
     _uploadReservationId = reservationId;
     (document.getElementById('upload-file') as HTMLInputElement).value = '';
+    (document.getElementById('upload-invoice-number') as HTMLInputElement).value = '';
     document.getElementById('upload-error')?.classList.add('hidden');
+    // Prikaži polje za broj računa samo ako kreiramo novi račun
+    const wrap = document.getElementById('upload-number-wrap');
+    if (invoiceId === '__new__') {
+      wrap?.classList.remove('hidden');
+    } else {
+      wrap?.classList.add('hidden');
+    }
     document.getElementById('modal-upload')?.classList.remove('hidden');
   }
 
@@ -358,6 +392,16 @@ function formatCurrency(n: number | null): string {
       formData.append('file', file);
       formData.append('invoice_id', _uploadInvoiceId);
       formData.append('reservation_id', _uploadReservationId);
+      if (_uploadInvoiceId === '__new__') {
+        const num = (document.getElementById('upload-invoice-number') as HTMLInputElement).value.trim();
+        if (!num) {
+          (document.getElementById('upload-error-text') as HTMLElement).textContent = 'Broj računa je obavezan.';
+          document.getElementById('upload-error')?.classList.remove('hidden');
+          btn.disabled = false; btn.textContent = 'Upload';
+          return;
+        }
+        formData.append('invoice_number_display', num);
+      }
       const res = await fetch('/api/racuni/upload', { method: 'POST', body: formData });
       const data = await res.json();
       if (!res.ok) {
@@ -375,21 +419,59 @@ function formatCurrency(n: number | null): string {
     }
   }
 
+  // ── Obriši račun ─────────────────────────────────────────────────────────────
+
+  let _deleteInvoiceId = '';
+
+  function confirmDelete(invoiceId: string) {
+    _deleteInvoiceId = invoiceId;
+    document.getElementById('delete-error')?.classList.add('hidden');
+    document.getElementById('modal-delete')?.classList.remove('hidden');
+  }
+
+  async function submitDelete() {
+    const btn = document.getElementById('delete-submit') as HTMLButtonElement;
+    btn.disabled = true; btn.textContent = 'Brisanje...';
+    try {
+      const res = await fetch('/api/racuni/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ invoice_id: _deleteInvoiceId }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        (document.getElementById('delete-error-text') as HTMLElement).textContent = data.error ?? 'Greška.';
+        document.getElementById('delete-error')?.classList.remove('hidden');
+      } else {
+        document.getElementById('modal-delete')?.classList.add('hidden');
+        window.location.href = '/racuni?success=deleted';
+      }
+    } catch {
+      (document.getElementById('delete-error-text') as HTMLElement).textContent = 'Greška pri brisanju.';
+      document.getElementById('delete-error')?.classList.remove('hidden');
+    } finally {
+      btn.disabled = false; btn.textContent = 'Obriši';
+    }
+  }
+
   // ── Expose globals ────────────────────────────────────────────────────────────
   (window as any).closeModalOnOverlay = closeModalOnOverlay;
   (window as any).openGenerateModal = openGenerateModal;
   (window as any).submitGenerate = submitGenerate;
   (window as any).openUploadModal = openUploadModal;
   (window as any).submitUpload = submitUpload;
+  (window as any).confirmDelete = confirmDelete;
+  (window as any).submitDelete = submitDelete;
 
   // Toast iz URL
   const _p = new URLSearchParams(window.location.search);
   const _s = _p.get('success');
   const _e = _p.get('error');
-  const _msgs: Record<string, string> = {
-    generated: 'Račun je uspješno kreiran.',
+  const _msgs = {
+    generated: 'Račun je uspješno generiran i spreman za preuzimanje.',
     uploaded: 'PDF je uspješno uploadан.',
-  };
+    deleted: 'Račun je uspješno obrisan.',
+  } as Record<string, string>;
   if (_s && _msgs[_s]) showToast(_msgs[_s]);
   if (_e) showToast(decodeURIComponent(_e), 'error');
   if (_s || _e) {

@@ -1,5 +1,6 @@
 import type { APIRoute } from 'astro';
 import { createSupabaseServerClient, createSupabaseAdminClient } from '../../../lib/supabase';
+import { generateInvoicePdf } from '../../../lib/invoice-pdf';
 
 export const POST: APIRoute = async ({ request, cookies }) => {
   const supabase = createSupabaseServerClient(request, cookies);
@@ -16,27 +17,83 @@ export const POST: APIRoute = async ({ request, cookies }) => {
   }
 
   // Dohvati rezervaciju
-  const { data: rez } = await adminSupabase.from('reservations').select('id, apartment_id').eq('id', reservation_id).single();
+  const { data: rez } = await adminSupabase
+    .from('reservations')
+    .select('id, apartment_id, guest_name, check_in, check_out, num_guests, amount_gross')
+    .eq('id', reservation_id)
+    .single();
   if (!rez) return new Response(JSON.stringify({ error: 'Rezervacija nije pronađena.' }), { status: 404 });
 
+  // Dohvati apartman
+  const { data: apt } = await adminSupabase
+    .from('apartments')
+    .select('name')
+    .eq('id', rez.apartment_id)
+    .single();
+
   // Provjeri da već ne postoji račun za tu rezervaciju
-  const { data: existing } = await adminSupabase.from('invoices').select('id').eq('reservation_id', reservation_id).maybeSingle();
+  const { data: existing } = await adminSupabase
+    .from('invoices')
+    .select('id')
+    .eq('reservation_id', reservation_id)
+    .maybeSingle();
   if (existing) return new Response(JSON.stringify({ error: 'Račun za ovu rezervaciju već postoji.' }), { status: 400 });
 
   // Broj računa (integer) = count postojećih + 1
-  const { count } = await adminSupabase.from('invoices').select('id', { count: 'exact', head: true }).eq('apartment_id', rez.apartment_id);
+  const { count } = await adminSupabase
+    .from('invoices')
+    .select('id', { count: 'exact', head: true })
+    .eq('apartment_id', rez.apartment_id);
   const invoice_number = (count ?? 0) + 1;
 
+  // Izračunaj broj noćenja
+  const checkInDate = new Date(rez.check_in);
+  const checkOutDate = new Date(rez.check_out);
+  const numNights = Math.round((checkOutDate.getTime() - checkInDate.getTime()) / (1000 * 60 * 60 * 24));
+
+  const generatedAt = new Date().toISOString();
+
+  // Generiraj PDF
+  let pdfBuffer: Buffer;
+  try {
+    pdfBuffer = await generateInvoicePdf({
+      invoiceNumberDisplay: invoice_number_display.trim(),
+      generatedAt,
+      apartmentName: apt?.name ?? 'Apartman',
+      guestName: rez.guest_name,
+      checkIn: rez.check_in,
+      checkOut: rez.check_out,
+      numNights,
+      numGuests: rez.num_guests ?? 1,
+      amountGross: rez.amount_gross ?? null,
+    });
+  } catch (err: any) {
+    return new Response(JSON.stringify({ error: `Greška pri generiranju PDF-a: ${err?.message ?? 'Nepoznata greška'}` }), { status: 500 });
+  }
+
+  // Upload PDF u Supabase Storage
+  const storagePath = `${reservation_id}/${Date.now()}.pdf`;
+  const { error: uploadError } = await adminSupabase.storage
+    .from('invoices')
+    .upload(storagePath, pdfBuffer, { contentType: 'application/pdf', upsert: true });
+
+  if (uploadError) {
+    return new Response(JSON.stringify({ error: `Greška pri uploadu PDF-a: ${uploadError.message}` }), { status: 500 });
+  }
+
+  const { data: { publicUrl } } = adminSupabase.storage.from('invoices').getPublicUrl(storagePath);
+
+  // Spremi u bazu
   const { error } = await adminSupabase.from('invoices').insert({
     reservation_id,
     apartment_id: rez.apartment_id,
     invoice_number,
     invoice_number_display: invoice_number_display.trim(),
-    generated_at: new Date().toISOString(),
+    generated_at: generatedAt,
     generated_by: user.id,
-    pdf_url: null,
+    pdf_url: publicUrl,
   });
 
   if (error) return new Response(JSON.stringify({ error: error.message }), { status: 500 });
-  return new Response(JSON.stringify({ success: true }), { status: 200 });
+  return new Response(JSON.stringify({ success: true, pdf_url: publicUrl }), { status: 200 });
 };
