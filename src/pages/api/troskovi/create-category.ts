@@ -1,6 +1,12 @@
 import type { APIRoute } from 'astro';
 import { createSupabaseServerClient, createSupabaseAdminClient } from '../../../lib/supabase';
 
+const COLOR_PALETTE = [
+  '#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6',
+  '#EC4899', '#06B6D4', '#84CC16', '#F97316', '#6366F1',
+  '#14B8A6', '#A855F7', '#F43F5E', '#0EA5E9', '#22C55E',
+];
+
 export const POST: APIRoute = async ({ request, cookies }) => {
   const supabase = createSupabaseServerClient(request, cookies);
   const { data: { user } } = await supabase.auth.getUser();
@@ -13,10 +19,15 @@ export const POST: APIRoute = async ({ request, cookies }) => {
   const { name } = await request.json();
   if (!name?.trim()) return new Response(JSON.stringify({ error: 'Naziv kategorije je obavezan.' }), { status: 400 });
 
+  // Pronađi boju koja još nije korištena
+  const { data: existingCats } = await adminSupabase.from('expense_categories').select('color');
+  const usedColors = new Set((existingCats ?? []).map((c) => c.color));
+  const color = COLOR_PALETTE.find((c) => !usedColors.has(c)) ?? COLOR_PALETTE[existingCats?.length ?? 0 % COLOR_PALETTE.length];
+
   const { data, error } = await adminSupabase
     .from('expense_categories')
-    .insert({ name: name.trim() })
-    .select('id, name')
+    .insert({ name: name.trim(), color })
+    .select('id, name, color')
     .single();
 
   if (error) {
