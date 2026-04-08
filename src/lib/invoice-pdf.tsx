@@ -2,15 +2,15 @@ import React from 'react';
 import {
   Document, Page, Text, View, StyleSheet, Font, renderToBuffer,
 } from '@react-pdf/renderer';
+import { INTER_400, INTER_600, INTER_700 } from './invoice-fonts';
 
-// ── Fonts (Inter s Latin Extended podrškom za hrvatska slova) ─────────────────
-const CDN = 'https://cdn.jsdelivr.net/npm/@fontsource/inter@5';
+// ── Fonts (Inter latin-ext, embedded as base64 — no network needed) ───────────
 Font.register({
   family: 'Inter',
   fonts: [
-    { src: `${CDN}/files/inter-latin-ext-400-normal.woff2`, fontWeight: 400 },
-    { src: `${CDN}/files/inter-latin-ext-600-normal.woff2`, fontWeight: 600 },
-    { src: `${CDN}/files/inter-latin-ext-700-normal.woff2`, fontWeight: 700 },
+    { src: INTER_400, fontWeight: 400 },
+    { src: INTER_600, fontWeight: 600 },
+    { src: INTER_700, fontWeight: 700 },
   ],
 });
 
