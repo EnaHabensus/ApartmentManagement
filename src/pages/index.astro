@@ -1,12 +1,13 @@
 ---
 import AppLayout from '../layouts/AppLayout.astro';
-import { createSupabaseServerClient } from '../lib/supabase';
+import { createSupabaseServerClient, createSupabaseAdminClient } from '../lib/supabase';
 
 const supabase = createSupabaseServerClient(Astro.request, Astro.cookies);
 const { data: { user } } = await supabase.auth.getUser();
 if (!user) return Astro.redirect('/login');
 
 const profile = Astro.locals.user!;
+const adminSupabase = createSupabaseAdminClient();
 
 // Provjeri ima li admin ulogu
 const { data: adminApts } = await supabase
@@ -109,6 +110,57 @@ const { data: upcoming } = await supabase
   .lte('check_in', in5DaysStr)
   .order('check_in');
 
+
+// Check-out danas
+const { data: checkoutsToday } = await adminSupabase
+  .from('reservations')
+  .select('id, guest_name, check_in, check_out, apartment_id')
+  .in('apartment_id', apartmentIds.length ? apartmentIds : ['none'])
+  .eq('check_out', todayStr)
+  .eq('status', 'active')
+  .order('check_out');
+
+// Check-in danas
+const { data: checkinsToday } = await adminSupabase
+  .from('reservations')
+  .select('id, guest_name, check_in, check_out, apartment_id')
+  .in('apartment_id', apartmentIds.length ? apartmentIds : ['none'])
+  .eq('check_in', todayStr)
+  .eq('status', 'active')
+  .order('check_in');
+
+// Dohvati dodjele čišćenja za today's rez
+const todayResIds = [
+  ...(checkoutsToday ?? []).map((r) => r.id),
+  ...(checkinsToday ?? []).map((r) => r.id),
+];
+const { data: cleaningRows } = todayResIds.length > 0
+  ? await adminSupabase.from('reservation_cleaning').select('reservation_id, user_id').in('reservation_id', todayResIds)
+  : { data: [] };
+const cleanerUserIds = [...new Set((cleaningRows ?? []).map((c) => c.user_id))];
+const { data: cleanerProfiles } = cleanerUserIds.length > 0
+  ? await adminSupabase.from('profiles').select('id, full_name').in('id', cleanerUserIds)
+  : { data: [] };
+const cleanerProfileMap = new Map((cleanerProfiles ?? []).map((p) => [p.id, p.full_name]));
+const cleaningMap = new Map(
+  (cleaningRows ?? []).map((c) => [c.reservation_id, { user_id: c.user_id, full_name: cleanerProfileMap.get(c.user_id) ?? '?' }])
+);
+
+// Dohvati korisnike po apartmanu za dropdown čišćenja
+const { data: allAptUsers } = await adminSupabase
+  .from('apartment_users')
+  .select('apartment_id, user_id')
+  .in('apartment_id', apartmentIds.length ? apartmentIds : ['none']);
+const aptUserIds = [...new Set((allAptUsers ?? []).map((u) => u.user_id))];
+const { data: aptUserProfiles } = aptUserIds.length > 0
+  ? await adminSupabase.from('profiles').select('id, full_name').in('id', aptUserIds)
+  : { data: [] };
+const aptUserProfileMap = new Map((aptUserProfiles ?? []).map((p) => [p.id, p.full_name]));
+const aptUsersForCleaningMap: Record<string, Array<{ user_id: string; full_name: string }>> = {};
+for (const au of (allAptUsers ?? [])) {
+  if (!aptUsersForCleaningMap[au.apartment_id]) aptUsersForCleaningMap[au.apartment_id] = [];
+  aptUsersForCleaningMap[au.apartment_id].push({ user_id: au.user_id, full_name: aptUserProfileMap.get(au.user_id) ?? '?' });
+}
 
 function formatDate(d: string) {
   const [y, m, day] = d.split('-');
@@ -229,5 +281,161 @@ function getStatus(r: { check_in: string; check_out: string }) {
         </div>
       )}
     </div>
+
+    <!-- Check-out danas -->
+    <div class="card mt-6">
+      <div class="px-5 py-4 border-b border-gray-100">
+        <h2 class="font-semibold text-gray-900">Check-out danas</h2>
+        <p class="text-xs text-gray-400 mt-0.5">{formatDate(todayStr)}</p>
+      </div>
+      {!checkoutsToday?.length ? (
+        <div class="p-8 text-center text-gray-400 text-sm">Nema check-outova danas.</div>
+      ) : (
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead>
+              <tr>
+                <th class="table-head px-4 py-3 text-left">Gost</th>
+                <th class="table-head px-4 py-3 text-left whitespace-nowrap">Check-out</th>
+                <th class="table-head px-4 py-3 text-center whitespace-nowrap">Noćenja</th>
+                <th class="table-head px-4 py-3 text-left">Čišćenje</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+              {checkoutsToday.map((r) => {
+                const cleaner = cleaningMap.get(r.id);
+                const aptUsers = aptUsersForCleaningMap[r.apartment_id] ?? [];
+                return (
+                  <tr class="table-row">
+                    <td class="table-cell font-medium text-gray-900">{r.guest_name}</td>
+                    <td class="table-cell text-gray-500">{formatDate(r.check_out)}</td>
+                    <td class="table-cell text-center text-gray-700 font-medium">{nights(r.check_in, r.check_out)}</td>
+                    <td class="table-cell">
+                      <div class="flex flex-col gap-1">
+                        {aptUsers.length > 0 && (
+                          <select
+                            class="input py-1 text-xs w-40"
+                            onchange={`assignCleaning('${r.id}', '${r.check_out}', this.value)`}
+                          >
+                            <option value="">— Odaberi —</option>
+                            {aptUsers.map((u) => (
+                              <option value={u.user_id} selected={cleaner?.user_id === u.user_id}>
+                                {u.full_name}
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                        {cleaner && (
+                          <span class="inline-flex items-center rounded-md bg-purple-50 px-2 py-0.5 text-xs font-medium text-purple-700 ring-1 ring-inset ring-purple-700/10">
+                            {cleaner.full_name}
+                          </span>
+                        )}
+                        {aptUsers.length === 0 && <span class="text-gray-400 text-xs">—</span>}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+
+    <!-- Check-in danas -->
+    <div class="card mt-6">
+      <div class="px-5 py-4 border-b border-gray-100">
+        <h2 class="font-semibold text-gray-900">Check-in danas</h2>
+        <p class="text-xs text-gray-400 mt-0.5">{formatDate(todayStr)}</p>
+      </div>
+      {!checkinsToday?.length ? (
+        <div class="p-8 text-center text-gray-400 text-sm">Nema check-inova danas.</div>
+      ) : (
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead>
+              <tr>
+                <th class="table-head px-4 py-3 text-left">Gost</th>
+                <th class="table-head px-4 py-3 text-left whitespace-nowrap">Check-in</th>
+                <th class="table-head px-4 py-3 text-center whitespace-nowrap">Noćenja</th>
+                <th class="table-head px-4 py-3 text-left">Čišćenje</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+              {checkinsToday.map((r) => {
+                const cleaner = cleaningMap.get(r.id);
+                const aptUsers = aptUsersForCleaningMap[r.apartment_id] ?? [];
+                return (
+                  <tr class="table-row">
+                    <td class="table-cell font-medium text-gray-900">{r.guest_name}</td>
+                    <td class="table-cell text-gray-500">{formatDate(r.check_in)}</td>
+                    <td class="table-cell text-center text-gray-700 font-medium">{nights(r.check_in, r.check_out)}</td>
+                    <td class="table-cell">
+                      <div class="flex flex-col gap-1">
+                        {aptUsers.length > 0 && (
+                          <select
+                            class="input py-1 text-xs w-40"
+                            onchange={`assignCleaning('${r.id}', '${r.check_out}', this.value)`}
+                          >
+                            <option value="">— Odaberi —</option>
+                            {aptUsers.map((u) => (
+                              <option value={u.user_id} selected={cleaner?.user_id === u.user_id}>
+                                {u.full_name}
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                        {cleaner && (
+                          <span class="inline-flex items-center rounded-md bg-purple-50 px-2 py-0.5 text-xs font-medium text-purple-700 ring-1 ring-inset ring-purple-700/10">
+                            {cleaner.full_name}
+                          </span>
+                        )}
+                        {aptUsers.length === 0 && <span class="text-gray-400 text-xs">—</span>}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+
   </div>
+
+  <div id="toast" class="hidden fixed bottom-4 right-4 z-50 rounded-lg px-4 py-3 text-sm font-medium shadow-lg"></div>
 </AppLayout>
+
+<script>
+  function showToast(message: string, type: 'success' | 'error' = 'success') {
+    const toast = document.getElementById('toast');
+    if (!toast) return;
+    toast.textContent = message;
+    toast.className = `fixed bottom-4 right-4 z-50 rounded-lg px-4 py-3 text-sm font-medium shadow-lg ${
+      type === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'
+    }`;
+    toast.classList.remove('hidden');
+    setTimeout(() => toast.classList.add('hidden'), 3000);
+  }
+
+  async function assignCleaning(reservationId: string, checkOut: string, userId: string) {
+    try {
+      const res = await fetch('/api/rezervacije/assign-cleaning', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reservation_id: reservationId, user_id: userId || null, check_out: checkOut }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        showToast('Čišćenje dodijeljeno.');
+      } else {
+        showToast(data.error ?? 'Greška pri dodjeli čišćenja.', 'error');
+      }
+    } catch {
+      showToast('Greška pri slanju zahtjeva.', 'error');
+    }
+  }
+
+  (window as any).assignCleaning = assignCleaning;
+</script>
