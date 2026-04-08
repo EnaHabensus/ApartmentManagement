@@ -19,15 +19,15 @@ export const POST: APIRoute = async ({ request, cookies }) => {
   // Dohvati rezervaciju
   const { data: rez } = await adminSupabase
     .from('reservations')
-    .select('id, apartment_id, guest_name, check_in, check_out, num_guests, amount_gross')
+    .select('id, apartment_id, guest_name, check_in, check_out, num_guests, amount_gross, payment_type')
     .eq('id', reservation_id)
     .single();
   if (!rez) return new Response(JSON.stringify({ error: 'Rezervacija nije pronađena.' }), { status: 404 });
 
-  // Dohvati apartman
+  // Dohvati apartman s podacima o iznajmljivaču
   const { data: apt } = await adminSupabase
     .from('apartments')
-    .select('name')
+    .select('name, owner_name, owner_oib, owner_address, owner_postal_code, owner_city, owner_country')
     .eq('id', rez.apartment_id)
     .single();
 
@@ -60,12 +60,19 @@ export const POST: APIRoute = async ({ request, cookies }) => {
       invoiceNumberDisplay: invoice_number_display.trim(),
       generatedAt,
       apartmentName: apt?.name ?? 'Apartman',
+      ownerName: apt?.owner_name ?? '',
+      ownerOib: apt?.owner_oib ?? '',
+      ownerAddress: apt?.owner_address ?? '',
+      ownerPostalCode: apt?.owner_postal_code ?? '',
+      ownerCity: apt?.owner_city ?? '',
+      ownerCountry: apt?.owner_country ?? 'Hrvatska',
       guestName: rez.guest_name,
       checkIn: rez.check_in,
       checkOut: rez.check_out,
       numNights,
       numGuests: rez.num_guests ?? 1,
       amountGross: rez.amount_gross ?? null,
+      paymentType: rez.payment_type ?? null,
     });
   } catch (err: any) {
     return new Response(JSON.stringify({ error: `Greška pri generiranju PDF-a: ${err?.message ?? 'Nepoznata greška'}` }), { status: 500 });

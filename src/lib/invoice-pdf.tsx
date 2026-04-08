@@ -1,286 +1,441 @@
 import React from 'react';
-import { Document, Page, Text, View, StyleSheet, renderToBuffer } from '@react-pdf/renderer';
+import {
+  Document, Page, Text, View, StyleSheet, Font, renderToBuffer,
+} from '@react-pdf/renderer';
 
-const styles = StyleSheet.create({
+// ── Fonts (Inter s Latin Extended podrškom za hrvatska slova) ─────────────────
+const CDN = 'https://cdn.jsdelivr.net/npm/@fontsource/inter@5';
+Font.register({
+  family: 'Inter',
+  fonts: [
+    { src: `${CDN}/files/inter-latin-ext-400-normal.woff2`, fontWeight: 400 },
+    { src: `${CDN}/files/inter-latin-ext-600-normal.woff2`, fontWeight: 600 },
+    { src: `${CDN}/files/inter-latin-ext-700-normal.woff2`, fontWeight: 700 },
+  ],
+});
+
+// Disable automatic hyphenation
+Font.registerHyphenationCallback((word) => [word]);
+
+// ── Palette ───────────────────────────────────────────────────────────────────
+const C = {
+  navy:    '#0F2544',
+  navyMid: '#1D3A6B',
+  blue:    '#2563EB',
+  slate:   '#64748B',
+  slateL:  '#94A3B8',
+  border:  '#E2E8F0',
+  bg:      '#F8FAFC',
+  white:   '#FFFFFF',
+  text:    '#0F172A',
+  textMid: '#334155',
+};
+
+// ── Styles ────────────────────────────────────────────────────────────────────
+const s = StyleSheet.create({
   page: {
-    fontFamily: 'Helvetica',
-    fontSize: 10,
-    padding: 48,
-    color: '#111827',
-    backgroundColor: '#ffffff',
+    fontFamily: 'Inter',
+    fontWeight: 400,
+    fontSize: 9,
+    color: C.text,
+    backgroundColor: C.white,
+    paddingTop: 0,
+    paddingBottom: 56,
+    paddingHorizontal: 0,
   },
-  // Header
-  header: {
+
+  // ─ Header band ─────────────────────────────────────────────────────────────
+  headerBand: {
+    backgroundColor: C.navy,
+    paddingHorizontal: 40,
+    paddingVertical: 24,
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 36,
+    alignItems: 'flex-end',
   },
-  headerLeft: {
-    flex: 1,
+  headerAptName: {
+    fontWeight: 700,
+    fontSize: 14,
+    color: C.white,
+    letterSpacing: 0.5,
   },
-  aptName: {
-    fontSize: 20,
-    fontFamily: 'Helvetica-Bold',
-    color: '#111827',
-    marginBottom: 4,
-  },
-  aptSubtitle: {
-    fontSize: 9,
-    color: '#6B7280',
+  headerAptSub: {
+    fontSize: 8,
+    color: '#93C5FD',
+    marginTop: 2,
   },
   headerRight: {
     alignItems: 'flex-end',
   },
-  invoiceTitle: {
-    fontSize: 26,
-    fontFamily: 'Helvetica-Bold',
-    color: '#1D4ED8',
-    marginBottom: 4,
+  headerTitle: {
+    fontSize: 10,
+    fontWeight: 600,
+    color: '#93C5FD',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
   },
-  invoiceNumber: {
-    fontSize: 12,
-    fontFamily: 'Helvetica-Bold',
-    color: '#374151',
-  },
-  invoiceDate: {
-    fontSize: 9,
-    color: '#6B7280',
+  headerNumber: {
+    fontSize: 22,
+    fontWeight: 700,
+    color: C.white,
     marginTop: 2,
   },
-  // Divider
-  divider: {
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-    marginVertical: 20,
+
+  // ─ Body ────────────────────────────────────────────────────────────────────
+  body: {
+    paddingHorizontal: 40,
+    paddingTop: 28,
   },
-  // Guest section
-  sectionRow: {
+
+  // ─ Two-column info section ──────────────────────────────────────────────────
+  infoRow: {
     flexDirection: 'row',
-    gap: 24,
-    marginBottom: 24,
+    gap: 20,
+    marginBottom: 28,
   },
-  sectionBox: {
+  infoBlock: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
-    borderRadius: 4,
-    padding: 12,
   },
-  sectionLabel: {
-    fontSize: 8,
-    fontFamily: 'Helvetica-Bold',
-    color: '#9CA3AF',
+  infoBlockRight: {
+    flex: 1,
+    alignItems: 'flex-end',
+  },
+  infoLabel: {
+    fontSize: 7,
+    fontWeight: 600,
+    color: C.slateL,
+    letterSpacing: 0.8,
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
     marginBottom: 6,
   },
-  sectionValue: {
+  infoName: {
     fontSize: 11,
-    fontFamily: 'Helvetica-Bold',
-    color: '#111827',
+    fontWeight: 700,
+    color: C.text,
+    marginBottom: 4,
+  },
+  infoLine: {
+    fontSize: 9,
+    color: C.textMid,
     marginBottom: 2,
   },
-  sectionSub: {
-    fontSize: 9,
-    color: '#6B7280',
+  infoLabelInline: {
+    fontWeight: 600,
+    color: C.textMid,
   },
-  // Table
-  tableHeader: {
+
+  divider: {
+    borderBottomWidth: 1,
+    borderBottomColor: C.border,
+    marginBottom: 24,
+  },
+
+  // ─ Table ───────────────────────────────────────────────────────────────────
+  tableHead: {
     flexDirection: 'row',
-    backgroundColor: '#1D4ED8',
+    backgroundColor: C.navy,
     borderRadius: 4,
-    padding: 8,
-    marginBottom: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    marginBottom: 0,
   },
-  tableHeaderCell: {
-    fontSize: 9,
-    fontFamily: 'Helvetica-Bold',
-    color: '#ffffff',
+  tableHeadCell: {
+    fontSize: 8,
+    fontWeight: 700,
+    color: C.white,
+  },
+  tableHeadCellSub: {
+    fontSize: 7,
+    fontWeight: 400,
+    color: '#93C5FD',
   },
   tableRow: {
     flexDirection: 'row',
+    paddingHorizontal: 10,
+    paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
-    padding: 8,
-  },
-  tableRowAlt: {
-    flexDirection: 'row',
-    backgroundColor: '#F9FAFB',
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
-    padding: 8,
+    borderBottomColor: C.border,
+    alignItems: 'center',
   },
   tableCell: {
-    fontSize: 10,
-    color: '#374151',
+    fontSize: 9.5,
+    color: C.textMid,
   },
   tableCellBold: {
-    fontSize: 10,
-    fontFamily: 'Helvetica-Bold',
-    color: '#111827',
+    fontSize: 9.5,
+    fontWeight: 700,
+    color: C.text,
   },
-  // Total row
+
+  // Column widths
+  cService:  { flex: 3 },
+  cUnit:     { flex: 2 },
+  cQty:      { flex: 1, alignItems: 'center' },
+  cPrice:    { flex: 2, alignItems: 'flex-end' },
+  cTotal:    { flex: 2, alignItems: 'flex-end' },
+
+  // ─ Summary ─────────────────────────────────────────────────────────────────
+  summaryWrap: {
+    marginTop: 12,
+    alignItems: 'flex-end',
+    marginBottom: 28,
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    marginBottom: 4,
+    gap: 48,
+  },
+  summaryLabel: {
+    fontSize: 9,
+    color: C.slate,
+    textAlign: 'right',
+  },
+  summaryValue: {
+    fontSize: 9,
+    color: C.textMid,
+    textAlign: 'right',
+    minWidth: 80,
+  },
+  summaryDivider: {
+    borderBottomWidth: 1,
+    borderBottomColor: C.border,
+    marginBottom: 8,
+    marginTop: 4,
+    width: 260,
+    alignSelf: 'flex-end',
+  },
   totalRow: {
     flexDirection: 'row',
-    backgroundColor: '#EFF6FF',
+    justifyContent: 'flex-end',
+    gap: 48,
+    backgroundColor: C.bg,
     borderRadius: 4,
-    padding: 10,
-    marginTop: 4,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    marginTop: 2,
   },
   totalLabel: {
     fontSize: 11,
-    fontFamily: 'Helvetica-Bold',
-    color: '#1D4ED8',
-    flex: 3,
+    fontWeight: 700,
+    color: C.navy,
+    textAlign: 'right',
   },
   totalValue: {
-    fontSize: 13,
-    fontFamily: 'Helvetica-Bold',
-    color: '#1D4ED8',
+    fontSize: 11,
+    fontWeight: 700,
+    color: C.blue,
     textAlign: 'right',
-    flex: 1,
+    minWidth: 80,
   },
-  // Footer
+
+  // ─ Footer ──────────────────────────────────────────────────────────────────
   footer: {
     position: 'absolute',
-    bottom: 36,
-    left: 48,
-    right: 48,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    paddingHorizontal: 40,
+    paddingTop: 14,
+    paddingBottom: 18,
     borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
-    paddingTop: 10,
+    borderTopColor: C.border,
+    backgroundColor: C.bg,
   },
-  footerText: {
-    fontSize: 8,
-    color: '#9CA3AF',
+  footerDate: {
+    fontSize: 9,
+    fontWeight: 600,
+    color: C.textMid,
+    marginBottom: 10,
   },
-  // Col widths
-  col1: { flex: 3 },
-  col2: { flex: 1, textAlign: 'center' },
-  col3: { flex: 1, textAlign: 'right' },
+  footerNote: {
+    fontSize: 7.5,
+    color: C.slateL,
+    marginBottom: 3,
+  },
 });
 
-function formatDate(d: string): string {
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function fmtDate(d: string): string {
   const [y, m, day] = d.split('-');
   return `${day}.${m}.${y}.`;
 }
 
-function formatCurrency(n: number | null | undefined): string {
-  if (n === null || n === undefined) return '0,00 €';
-  return new Intl.NumberFormat('hr-HR', { style: 'currency', currency: 'EUR' }).format(n);
+function fmtMoney(n: number | null | undefined): string {
+  if (n === null || n === undefined) return '— EUR';
+  return `${new Intl.NumberFormat('hr-HR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n)} EUR`;
 }
 
-function nightsLabel(n: number): string {
-  if (n === 1) return '1 noćenje';
-  if (n >= 2 && n <= 4) return `${n} noćenja`;
-  return `${n} noćenja`;
-}
+const PAYMENT_LABELS: Record<string, string> = {
+  credit_card:   'Kreditna kartica / Credit card',
+  cash:          'Gotovina / Cash',
+  bank_transfer: 'Bankovni transfer / Bank transfer',
+  airbnb:        'Airbnb',
+  booking_com:   'Booking.com',
+};
 
+// ── Data shape ────────────────────────────────────────────────────────────────
 export interface InvoiceData {
   invoiceNumberDisplay: string;
   generatedAt: string;
+  // Apartment / owner
   apartmentName: string;
+  ownerName: string;
+  ownerOib: string;
+  ownerAddress: string;
+  ownerPostalCode: string;
+  ownerCity: string;
+  ownerCountry: string;
+  // Reservation / guest
   guestName: string;
   checkIn: string;
   checkOut: string;
   numNights: number;
   numGuests: number;
   amountGross: number | null;
+  paymentType: string | null;
 }
 
-const InvoiceDocument = ({ data }: { data: InvoiceData }) => {
-  const pricePerNight =
-    data.amountGross !== null && data.numNights > 0
-      ? data.amountGross / data.numNights
-      : null;
+// ── Component ─────────────────────────────────────────────────────────────────
+const InvoiceDoc = ({ d }: { d: InvoiceData }) => {
+  const pricePerNight = d.amountGross !== null && d.numNights > 0
+    ? d.amountGross / d.numNights
+    : null;
 
-  const genDate = new Date(data.generatedAt);
-  const genDateStr = genDate.toLocaleDateString('hr-HR', {
-    day: '2-digit', month: '2-digit', year: 'numeric',
-  });
+  const genDate = new Date(d.generatedAt);
+  const genDateStr = `${String(genDate.getDate()).padStart(2, '0')}. ${String(genDate.getMonth() + 1).padStart(2, '0')}. ${genDate.getFullYear()}.`;
+  const genTimeStr = `${String(genDate.getHours()).padStart(2, '0')}:${String(genDate.getMinutes()).padStart(2, '0')}`;
+
+  const paymentLabel = d.paymentType ? (PAYMENT_LABELS[d.paymentType] ?? d.paymentType) : '—';
 
   return (
     <Document>
-      <Page size="A4" style={styles.page}>
+      <Page size="A4" style={s.page}>
 
-        {/* Header */}
-        <View style={styles.header}>
-          <View style={styles.headerLeft}>
-            <Text style={styles.aptName}>{data.apartmentName}</Text>
-            <Text style={styles.aptSubtitle}>Iznajmljivanje apartmana</Text>
+        {/* ── Dark header band ───────────────────────────────────────────── */}
+        <View style={s.headerBand}>
+          <View>
+            <Text style={s.headerAptName}>{d.apartmentName}</Text>
+            <Text style={s.headerAptSub}>Iznajmljivanje apartmana</Text>
           </View>
-          <View style={styles.headerRight}>
-            <Text style={styles.invoiceTitle}>RAČUN</Text>
-            <Text style={styles.invoiceNumber}>Br. {data.invoiceNumberDisplay}</Text>
-            <Text style={styles.invoiceDate}>Datum: {genDateStr}</Text>
+          <View style={s.headerRight}>
+            <Text style={s.headerTitle}>Račun / Invoice</Text>
+            <Text style={s.headerNumber}>#{d.invoiceNumberDisplay}</Text>
           </View>
         </View>
 
-        <View style={styles.divider} />
+        {/* ── Body ──────────────────────────────────────────────────────── */}
+        <View style={s.body}>
 
-        {/* Guest + Stay info */}
-        <View style={styles.sectionRow}>
-          <View style={styles.sectionBox}>
-            <Text style={styles.sectionLabel}>Gost</Text>
-            <Text style={styles.sectionValue}>{data.guestName}</Text>
-            {data.numGuests > 1 && (
-              <Text style={styles.sectionSub}>{data.numGuests} gosta</Text>
-            )}
+          {/* ── Two-column info ─────────────────────────────────────────── */}
+          <View style={s.infoRow}>
+
+            {/* Left: Owner */}
+            <View style={s.infoBlock}>
+              <Text style={s.infoLabel}>Iznajmljivač / Owner</Text>
+              <Text style={s.infoName}>{d.ownerName}</Text>
+              <Text style={s.infoLine}>
+                <Text style={s.infoLabelInline}>OIB / PIN: </Text>
+                {d.ownerOib}
+              </Text>
+              <Text style={s.infoLine}>{d.ownerAddress}</Text>
+              <Text style={s.infoLine}>{d.ownerPostalCode} {d.ownerCity}</Text>
+              <Text style={s.infoLine}>{d.ownerCountry}</Text>
+            </View>
+
+            {/* Right: Guest + stay */}
+            <View style={s.infoBlockRight}>
+              <Text style={s.infoLabel}>Gost / Guest</Text>
+              <Text style={s.infoName}>{d.guestName}</Text>
+              {d.numGuests > 1 && (
+                <Text style={s.infoLine}>{d.numGuests} gosta</Text>
+              )}
+              <Text style={[s.infoLine, { marginTop: 8 }]}>
+                <Text style={s.infoLabelInline}>Vrijeme boravka / Time of stay: </Text>
+              </Text>
+              <Text style={s.infoLine}>
+                {fmtDate(d.checkIn)} - {fmtDate(d.checkOut)}
+              </Text>
+              <Text style={[s.infoLine, { marginTop: 6 }]}>
+                <Text style={s.infoLabelInline}>Način plaćanja / Payment type: </Text>
+              </Text>
+              <Text style={s.infoLine}>{paymentLabel}</Text>
+            </View>
+
           </View>
-          <View style={styles.sectionBox}>
-            <Text style={styles.sectionLabel}>Check-in</Text>
-            <Text style={styles.sectionValue}>{formatDate(data.checkIn)}</Text>
+
+          <View style={s.divider} />
+
+          {/* ── Table ───────────────────────────────────────────────────── */}
+          <View style={s.tableHead}>
+            <View style={s.cService}>
+              <Text style={s.tableHeadCell}>Usluga</Text>
+              <Text style={s.tableHeadCellSub}>/ Service</Text>
+            </View>
+            <View style={s.cUnit}>
+              <Text style={s.tableHeadCell}>Jedinica</Text>
+              <Text style={s.tableHeadCellSub}>/ Unit</Text>
+            </View>
+            <View style={[s.cQty, { alignItems: 'center' }]}>
+              <Text style={s.tableHeadCell}>Kol.</Text>
+              <Text style={s.tableHeadCellSub}>/ Qty</Text>
+            </View>
+            <View style={[s.cPrice, { alignItems: 'flex-end' }]}>
+              <Text style={s.tableHeadCell}>Cijena</Text>
+              <Text style={s.tableHeadCellSub}>/ Price</Text>
+            </View>
+            <View style={[s.cTotal, { alignItems: 'flex-end' }]}>
+              <Text style={s.tableHeadCell}>Ukupno</Text>
+              <Text style={s.tableHeadCellSub}>/ Total</Text>
+            </View>
           </View>
-          <View style={styles.sectionBox}>
-            <Text style={styles.sectionLabel}>Check-out</Text>
-            <Text style={styles.sectionValue}>{formatDate(data.checkOut)}</Text>
+
+          <View style={s.tableRow}>
+            <View style={s.cService}>
+              <Text style={s.tableCellBold}>Noćenje</Text>
+              <Text style={[s.tableCell, { fontSize: 8, color: C.slate }]}>/ Accommodation</Text>
+            </View>
+            <View style={s.cUnit}>
+              <Text style={s.tableCell}>{d.apartmentName}</Text>
+            </View>
+            <View style={[s.cQty, { alignItems: 'center' }]}>
+              <Text style={s.tableCell}>{d.numNights}</Text>
+            </View>
+            <View style={[s.cPrice, { alignItems: 'flex-end' }]}>
+              <Text style={s.tableCell}>
+                {pricePerNight !== null ? fmtMoney(pricePerNight) : '—'}
+              </Text>
+            </View>
+            <View style={[s.cTotal, { alignItems: 'flex-end' }]}>
+              <Text style={s.tableCellBold}>{fmtMoney(d.amountGross)}</Text>
+            </View>
           </View>
-          <View style={styles.sectionBox}>
-            <Text style={styles.sectionLabel}>Trajanje</Text>
-            <Text style={styles.sectionValue}>{nightsLabel(data.numNights)}</Text>
+
+          {/* ── Summary ─────────────────────────────────────────────────── */}
+          <View style={s.summaryWrap}>
+            <View style={s.summaryRow}>
+              <Text style={s.summaryLabel}>Ukupna cijena / Total price</Text>
+              <Text style={s.summaryValue}>{fmtMoney(d.amountGross)}</Text>
+            </View>
+            <View style={s.summaryDivider} />
+            <View style={s.totalRow}>
+              <Text style={s.totalLabel}>Ukupno / Total</Text>
+              <Text style={s.totalValue}>{fmtMoney(d.amountGross)}</Text>
+            </View>
           </View>
+
         </View>
 
-        {/* Table */}
-        <View style={styles.tableHeader}>
-          <Text style={[styles.tableHeaderCell, styles.col1]}>Opis</Text>
-          <Text style={[styles.tableHeaderCell, styles.col2]}>Kol.</Text>
-          <Text style={[styles.tableHeaderCell, styles.col3]}>Iznos</Text>
-        </View>
-
-        {pricePerNight !== null ? (
-          <View style={styles.tableRow}>
-            <Text style={[styles.tableCell, styles.col1]}>
-              Noćenje — {data.apartmentName}
-            </Text>
-            <Text style={[styles.tableCell, styles.col2]}>{data.numNights}</Text>
-            <Text style={[styles.tableCellBold, styles.col3]}>
-              {formatCurrency(data.amountGross)}
-            </Text>
-          </View>
-        ) : (
-          <View style={styles.tableRow}>
-            <Text style={[styles.tableCell, styles.col1]}>
-              Noćenje — {data.apartmentName} ({nightsLabel(data.numNights)})
-            </Text>
-            <Text style={[styles.tableCell, styles.col2]}>1</Text>
-            <Text style={[styles.tableCellBold, styles.col3]}>—</Text>
-          </View>
-        )}
-
-        {/* Total */}
-        <View style={styles.totalRow}>
-          <Text style={styles.totalLabel}>UKUPNO ZA PLATITI</Text>
-          <Text style={styles.totalValue}>{formatCurrency(data.amountGross)}</Text>
-        </View>
-
-        {/* Footer */}
-        <View style={styles.footer}>
-          <Text style={styles.footerText}>{data.apartmentName}</Text>
-          <Text style={styles.footerText}>
-            Račun br. {data.invoiceNumberDisplay} · {genDateStr}
+        {/* ── Footer ────────────────────────────────────────────────────── */}
+        <View style={s.footer}>
+          <Text style={s.footerDate}>
+            Datum / Date: {genDateStr} {genTimeStr}
+          </Text>
+          <Text style={s.footerNote}>
+            PDV nije uračunat u cijenu temeljem čl. 90, st. 2 Zakona o PDV-u / VAT is not included in the price according to Art. 90, paragraph 2 of the VAT Law
+          </Text>
+          <Text style={s.footerNote}>
+            Turistička pristojba uključena je u cijenu / Tourist tax included in the price of service
           </Text>
         </View>
 
@@ -289,7 +444,7 @@ const InvoiceDocument = ({ data }: { data: InvoiceData }) => {
   );
 };
 
+// ── Export ────────────────────────────────────────────────────────────────────
 export async function generateInvoicePdf(data: InvoiceData): Promise<Buffer> {
-  const element = React.createElement(InvoiceDocument, { data });
-  return await renderToBuffer(element);
+  return await renderToBuffer(React.createElement(InvoiceDoc, { d: data }));
 }
