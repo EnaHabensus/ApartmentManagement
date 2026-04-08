@@ -282,125 +282,126 @@ function getStatus(r: { check_in: string; check_out: string }) {
       )}
     </div>
 
-    <!-- Check-out danas -->
-    <div class="card mt-6">
-      <div class="px-5 py-4 border-b border-gray-100">
-        <h2 class="font-semibold text-gray-900">Check-out danas</h2>
-        <p class="text-xs text-gray-400 mt-0.5">{formatDate(todayStr)}</p>
-      </div>
-      {!checkoutsToday?.length ? (
-        <div class="p-8 text-center text-gray-400 text-sm">Nema check-outova danas.</div>
-      ) : (
-        <div class="overflow-x-auto">
-          <table class="w-full text-sm">
-            <thead>
-              <tr>
-                <th class="table-head px-4 py-3 text-left">Gost</th>
-                <th class="table-head px-4 py-3 text-left whitespace-nowrap">Check-out</th>
-                <th class="table-head px-4 py-3 text-center whitespace-nowrap">Noćenja</th>
-                <th class="table-head px-4 py-3 text-left">Čišćenje</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-gray-100">
-              {checkoutsToday.map((r) => {
-                const cleaner = cleaningMap.get(r.id);
-                const aptUsers = aptUsersForCleaningMap[r.apartment_id] ?? [];
-                return (
-                  <tr class="table-row">
-                    <td class="table-cell font-medium text-gray-900">{r.guest_name}</td>
-                    <td class="table-cell text-gray-500">{formatDate(r.check_out)}</td>
-                    <td class="table-cell text-center text-gray-700 font-medium">{nights(r.check_in, r.check_out)}</td>
-                    <td class="table-cell">
-                      <div class="flex flex-col gap-1">
-                        {aptUsers.length > 0 && (
-                          <select
-                            class="input py-1 text-xs w-40"
-                            onchange={`assignCleaning('${r.id}', '${r.check_out}', this.value)`}
-                          >
-                            <option value="">— Odaberi —</option>
-                            {aptUsers.map((u) => (
-                              <option value={u.user_id} selected={cleaner?.user_id === u.user_id}>
-                                {u.full_name}
-                              </option>
-                            ))}
-                          </select>
-                        )}
-                        {cleaner && (
-                          <span class="inline-flex items-center rounded-md bg-purple-50 px-2 py-0.5 text-xs font-medium text-purple-700 ring-1 ring-inset ring-purple-700/10 w-fit">
-                            {cleaner.full_name}
-                          </span>
-                        )}
-                        {aptUsers.length === 0 && <span class="text-gray-400 text-xs">—</span>}
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </div>
+    <!-- Check-out i Check-in danas -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
 
-    <!-- Check-in danas -->
-    <div class="card mt-6">
-      <div class="px-5 py-4 border-b border-gray-100">
-        <h2 class="font-semibold text-gray-900">Check-in danas</h2>
-        <p class="text-xs text-gray-400 mt-0.5">{formatDate(todayStr)}</p>
-      </div>
-      {!checkinsToday?.length ? (
-        <div class="p-8 text-center text-gray-400 text-sm">Nema check-inova danas.</div>
-      ) : (
-        <div class="overflow-x-auto">
-          <table class="w-full text-sm">
-            <thead>
-              <tr>
-                <th class="table-head px-4 py-3 text-left">Gost</th>
-                <th class="table-head px-4 py-3 text-left whitespace-nowrap">Check-in</th>
-                <th class="table-head px-4 py-3 text-center whitespace-nowrap">Noćenja</th>
-                <th class="table-head px-4 py-3 text-left">Čišćenje</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-gray-100">
-              {checkinsToday.map((r) => {
-                const cleaner = cleaningMap.get(r.id);
-                const aptUsers = aptUsersForCleaningMap[r.apartment_id] ?? [];
-                return (
-                  <tr class="table-row">
-                    <td class="table-cell font-medium text-gray-900">{r.guest_name}</td>
-                    <td class="table-cell text-gray-500">{formatDate(r.check_in)}</td>
-                    <td class="table-cell text-center text-gray-700 font-medium">{nights(r.check_in, r.check_out)}</td>
-                    <td class="table-cell">
-                      <div class="flex flex-col gap-1">
-                        {aptUsers.length > 0 && (
-                          <select
-                            class="input py-1 text-xs w-40"
-                            onchange={`assignCleaning('${r.id}', '${r.check_out}', this.value)`}
-                          >
-                            <option value="">— Odaberi —</option>
-                            {aptUsers.map((u) => (
-                              <option value={u.user_id} selected={cleaner?.user_id === u.user_id}>
-                                {u.full_name}
-                              </option>
-                            ))}
-                          </select>
-                        )}
-                        {cleaner && (
-                          <span class="inline-flex items-center rounded-md bg-purple-50 px-2 py-0.5 text-xs font-medium text-purple-700 ring-1 ring-inset ring-purple-700/10 w-fit">
-                            {cleaner.full_name}
-                          </span>
-                        )}
-                        {aptUsers.length === 0 && <span class="text-gray-400 text-xs">—</span>}
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+      <!-- Check-out danas -->
+      <div class="card">
+        <div class="px-5 py-4 border-b border-gray-100">
+          <h2 class="font-semibold text-gray-900">Check-out danas</h2>
+          <p class="text-xs text-gray-400 mt-0.5">{formatDate(todayStr)}</p>
         </div>
-      )}
-    </div>
+        {!checkoutsToday?.length ? (
+          <div class="p-8 text-center text-gray-400 text-sm">Nema check-outova danas.</div>
+        ) : (
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead>
+                <tr>
+                  <th class="table-head px-4 py-3 text-left">Gost</th>
+                  <th class="table-head px-4 py-3 text-center">Noćenja</th>
+                  <th class="table-head px-4 py-3 text-left">Čišćenje</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-100">
+                {checkoutsToday.map((r) => {
+                  const cleaner = cleaningMap.get(r.id);
+                  const aptUsers = aptUsersForCleaningMap[r.apartment_id] ?? [];
+                  return (
+                    <tr class="table-row">
+                      <td class="table-cell font-medium text-gray-900">{r.guest_name}</td>
+                      <td class="table-cell text-center text-gray-700 font-medium">{nights(r.check_in, r.check_out)}</td>
+                      <td class="table-cell">
+                        <div class="flex flex-col gap-1">
+                          {aptUsers.length > 0 && (
+                            <select
+                              class="input py-1 text-xs w-40"
+                              onchange={`assignCleaning('${r.id}', '${r.check_out}', this.value)`}
+                            >
+                              <option value="">— Odaberi —</option>
+                              {aptUsers.map((u) => (
+                                <option value={u.user_id} selected={cleaner?.user_id === u.user_id}>
+                                  {u.full_name}
+                                </option>
+                              ))}
+                            </select>
+                          )}
+                          {cleaner && (
+                            <span class="inline-flex items-center rounded-md bg-purple-50 px-2 py-0.5 text-xs font-medium text-purple-700 ring-1 ring-inset ring-purple-700/10 w-fit">
+                              {cleaner.full_name}
+                            </span>
+                          )}
+                          {aptUsers.length === 0 && <span class="text-gray-400 text-xs">—</span>}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      <!-- Check-in danas -->
+      <div class="card">
+        <div class="px-5 py-4 border-b border-gray-100">
+          <h2 class="font-semibold text-gray-900">Check-in danas</h2>
+          <p class="text-xs text-gray-400 mt-0.5">{formatDate(todayStr)}</p>
+        </div>
+        {!checkinsToday?.length ? (
+          <div class="p-8 text-center text-gray-400 text-sm">Nema check-inova danas.</div>
+        ) : (
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead>
+                <tr>
+                  <th class="table-head px-4 py-3 text-left">Gost</th>
+                  <th class="table-head px-4 py-3 text-center">Noćenja</th>
+                  <th class="table-head px-4 py-3 text-left">Čišćenje</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-100">
+                {checkinsToday.map((r) => {
+                  const cleaner = cleaningMap.get(r.id);
+                  const aptUsers = aptUsersForCleaningMap[r.apartment_id] ?? [];
+                  return (
+                    <tr class="table-row">
+                      <td class="table-cell font-medium text-gray-900">{r.guest_name}</td>
+                      <td class="table-cell text-center text-gray-700 font-medium">{nights(r.check_in, r.check_out)}</td>
+                      <td class="table-cell">
+                        <div class="flex flex-col gap-1">
+                          {aptUsers.length > 0 && (
+                            <select
+                              class="input py-1 text-xs w-40"
+                              onchange={`assignCleaning('${r.id}', '${r.check_out}', this.value)`}
+                            >
+                              <option value="">— Odaberi —</option>
+                              {aptUsers.map((u) => (
+                                <option value={u.user_id} selected={cleaner?.user_id === u.user_id}>
+                                  {u.full_name}
+                                </option>
+                              ))}
+                            </select>
+                          )}
+                          {cleaner && (
+                            <span class="inline-flex items-center rounded-md bg-purple-50 px-2 py-0.5 text-xs font-medium text-purple-700 ring-1 ring-inset ring-purple-700/10 w-fit">
+                              {cleaner.full_name}
+                            </span>
+                          )}
+                          {aptUsers.length === 0 && <span class="text-gray-400 text-xs">—</span>}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+    </div>{/* end grid check-in/out */}
 
   </div>
 
