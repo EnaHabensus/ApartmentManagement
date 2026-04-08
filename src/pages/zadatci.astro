@@ -187,9 +187,31 @@ function getInitials(name: string): string {
     </div>
 
 
-    <!-- Filteri -->
-    <div class="mb-4 flex flex-wrap items-center gap-3">
-      <form method="GET" action="/zadatci" class="flex flex-wrap gap-3" id="filter-form">
+    <!-- Tabovi i filter apartmana -->
+    <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+      <!-- Tabovi -->
+      <div class="flex gap-1 bg-gray-100 rounded-lg p-1">
+        {[
+          { key: 'all', label: 'Svi' },
+          { key: 'active', label: 'Aktivni' },
+          { key: 'completed', label: 'Završeni' },
+        ].map((t) => (
+          <a
+            href={`/zadatci?status=${t.key}${filterApartmentId ? `&apartment_id=${filterApartmentId}` : ''}`}
+            class={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+              filterStatus === t.key
+                ? 'bg-white text-gray-900 shadow-sm'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            {t.label}
+          </a>
+        ))}
+      </div>
+
+      <!-- Filter apartman -->
+      <form method="GET" action="/zadatci" id="filter-form">
+        <input type="hidden" name="status" value={filterStatus} />
         <select
           name="apartment_id"
           onchange="document.getElementById('filter-form').submit()"
@@ -202,16 +224,6 @@ function getInitials(name: string): string {
             </option>
           ))}
         </select>
-        <select
-          name="status"
-          onchange="document.getElementById('filter-form').submit()"
-          class="input py-1.5 text-sm w-auto"
-        >
-          <option value="active" selected={filterStatus === 'active'}>Aktivni</option>
-          <option value="completed" selected={filterStatus === 'completed'}>Završeni</option>
-          <option value="all" selected={filterStatus === 'all'}>Svi</option>
-        </select>
-        {filterApartmentId && <input type="hidden" name="apartment_id" value={filterApartmentId} />}
       </form>
     </div>
 
