@@ -1,173 +1,132 @@
 ---
 import AppLayout from '../layouts/AppLayout.astro';
-import { createSupabaseServerClient } from '../lib/supabase';
-import type { ApartmentInvoiceSettings } from '../lib/types';
+import { createSupabaseServerClient, createSupabaseAdminClient } from '../lib/supabase';
 
 const supabase = createSupabaseServerClient(Astro.request, Astro.cookies);
 const { data: { user } } = await supabase.auth.getUser();
 if (!user) return Astro.redirect('/login');
 
 const profile = Astro.locals.user!;
+const adminSupabase = createSupabaseAdminClient();
 
-// Dohvati apartmane gdje je prijavljeni korisnik admin
-const { data: myApartmentUsers } = await supabase
+// Dohvati apartmane
+const { data: myApartmentUsers } = await adminSupabase
   .from('apartment_users')
-  .select('apartment_id, apartments(id, name)')
-  .eq('user_id', user.id)
-  .eq('role', 'admin');
+  .select('apartment_id, role')
+  .eq('user_id', user.id);
 
-const adminApartments = myApartmentUsers
-  ?.map((au) => au.apartments)
-  .filter((a): a is { id: string; name: string } => !!a) ?? [];
+const isAdmin = (myApartmentUsers ?? []).some((au) => au.role === 'admin');
+const adminApartmentIds = (myApartmentUsers ?? []).filter((au) => au.role === 'admin').map((au) => au.apartment_id);
 
-const adminApartmentIds = adminApartments.map((a) => a.id);
+if (!isAdmin) return Astro.redirect('/');
 
-if (adminApartmentIds.length === 0) {
-  return Astro.redirect('/');
-}
+const { data: apartmentsData } = await adminSupabase
+  .from('apartments')
+  .select('id, name, color')
+  .in('id', adminApartmentIds)
+  .eq('is_deleted', false);
 
-// Filter po apartmanu
+const adminApartments = apartmentsData ?? [];
+const aptColorMap = new Map(adminApartments.map((a) => [a.id, (a as any).color as string ?? '#3B82F6']));
+const aptNameMap = new Map(adminApartments.map((a) => [a.id, a.name]));
+
+// URL parametri
 const filterApartmentId = Astro.url.searchParams.get('apartment_id') ?? '';
-const activeApartmentIds = filterApartmentId ? [filterApartmentId] : adminApartmentIds;
-
-// Aktivni tab
 const activeTab = Astro.url.searchParams.get('tab') ?? 'sve';
+const aptIds = filterApartmentId ? [filterApartmentId] : adminApartmentIds;
 
-// Dohvati invoice settings za sve adminove apartmane
-const { data: invoiceSettingsAll } = await supabase
-  .from('apartment_invoice_settings')
-  .select('*')
-  .in('apartment_id', adminApartmentIds);
-
-const invoiceSettingsMap = new Map<string, ApartmentInvoiceSettings>(
-  (invoiceSettingsAll ?? []).map((s) => [s.apartment_id, s])
-);
-
-// Danas (bez vremena)
-const today = new Date();
-today.setHours(23, 59, 59, 999);
-const todayISO = today.toISOString();
-
-// Dohvati rezervacije: status=active AND check_out <= danas
-const { data: allReservations } = await supabase
+// SVE aktivne rezervacije, sortirano po check_in uzlazno
+const { data: allReservations } = await adminSupabase
   .from('reservations')
-  .select('*, apartments(id, name)')
-  .in('apartment_id', activeApartmentIds)
+  .select('*')
+  .in('apartment_id', aptIds.length > 0 ? aptIds : ['none'])
   .eq('status', 'active')
-  .lte('check_out', todayISO)
-  .order('check_out', { ascending: false });
+  .order('check_in', { ascending: true });
 
-// Dohvati invoices za te rezervacije
 const reservationIds = (allReservations ?? []).map((r) => r.id);
 
-const { data: invoices } = reservationIds.length > 0
-  ? await supabase
-      .from('invoices')
-      .select('*')
-      .in('reservation_id', reservationIds)
+// Dohvati račune za te rezervacije
+const { data: invoicesData } = reservationIds.length > 0
+  ? await adminSupabase.from('invoices').select('*').in('reservation_id', reservationIds)
   : { data: [] };
 
-const invoiceByReservation = new Map(
-  (invoices ?? []).map((inv) => [inv.reservation_id, inv])
-);
+const invoiceByReservation = new Map((invoicesData ?? []).map((inv) => [inv.reservation_id, inv]));
+
+// Zadnji izdani račun po apartmanu (za hint u modalu)
+const { data: lastInvoicesData } = adminApartmentIds.length > 0
+  ? await adminSupabase
+      .from('invoices')
+      .select('apartment_id, invoice_number_display, generated_at')
+      .in('apartment_id', adminApartmentIds)
+      .order('generated_at', { ascending: false })
+  : { data: [] };
+
+const lastInvoiceByApt = new Map<string, string>();
+for (const inv of (lastInvoicesData ?? [])) {
+  if (!lastInvoiceByApt.has(inv.apartment_id)) {
+    lastInvoiceByApt.set(inv.apartment_id, inv.invoice_number_display);
+  }
+}
 
 // Filtriraj po tabu
-const reservations = (allReservations ?? []).filter((r) => {
+const allRez = allReservations ?? [];
+const reservations = allRez.filter((r) => {
   if (activeTab === 'izdani') return invoiceByReservation.has(r.id);
   if (activeTab === 'za_izdati') return !invoiceByReservation.has(r.id);
-  return true; // 'sve'
+  return true;
 });
 
-// Zadnji generirani broj računa po apartmanu (za modal potvrde)
-function getLastInvoiceNumber(apartmentId: string): number {
-  return invoiceSettingsMap.get(apartmentId)?.last_invoice_number ?? 0;
+function formatDate(d: string): string {
+  const [y, m, day] = d.split('-');
+  return `${day}.${m}.${y}`;
 }
 
-function getNextInvoiceNumber(apartmentId: string): number {
-  const settings = invoiceSettingsMap.get(apartmentId);
-  if (!settings) return 1;
-  return (settings.last_invoice_number ?? 0) + 1;
+function formatCurrency(n: number | null): string {
+  if (n === null || n === undefined) return '—';
+  return new Intl.NumberFormat('hr-HR', { style: 'currency', currency: 'EUR' }).format(n);
 }
-
-// Formatiranje datuma DD.MM.YYYY
-function formatDate(dateStr: string | null): string {
-  if (!dateStr) return '—';
-  const d = new Date(dateStr);
-  return d.toLocaleDateString('hr-HR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-}
-
-// Formatiranje datuma i vremena DD.MM.YYYY HH:MM
-function formatDateTime(dateStr: string | null): string {
-  if (!dateStr) return '—';
-  const d = new Date(dateStr);
-  return d.toLocaleDateString('hr-HR', { day: '2-digit', month: '2-digit', year: 'numeric' }) +
-    ' ' + d.toLocaleTimeString('hr-HR', { hour: '2-digit', minute: '2-digit' });
-}
-
-const success = Astro.url.searchParams.get('success');
-const error = Astro.url.searchParams.get('error');
 ---
 
 <AppLayout title="Računi" user={profile} isAdmin={true} activeRoute="/racuni">
   <div class="p-6 max-w-7xl mx-auto">
+
     <!-- Header -->
     <div class="flex items-center justify-between mb-6">
       <div>
         <h1 class="text-2xl font-bold text-gray-900">Računi</h1>
-        <p class="text-gray-500 text-sm mt-1">{reservations.length} zapis{reservations.length === 1 ? '' : 'a'}</p>
+        <p class="text-gray-500 text-sm mt-1">{reservations.length} rezervacij{reservations.length === 1 ? 'a' : 'a'}</p>
       </div>
-      <button
-        onclick="document.getElementById('modal-settings').classList.remove('hidden')"
-        class="btn-secondary"
-      >
-        Postavi generiranje
-      </button>
     </div>
 
-
-    <!-- Gornji kontroli: filter + tabovi -->
-    <div class="flex flex-col sm:flex-row sm:items-center gap-4 mb-6">
-      <!-- Filter apartmana -->
-      <div class="flex items-center gap-3">
-        <label class="label mb-0 text-sm font-medium text-gray-700 whitespace-nowrap">Apartman:</label>
-        <form method="GET" action="/racuni" id="filter-form">
-          <input type="hidden" name="tab" value={activeTab} />
-          <select
-            name="apartment_id"
-            onchange="this.form.submit()"
-            class="input py-1.5 text-sm"
-          >
-            <option value="">Svi apartmani</option>
-            {adminApartments.map((apt) => (
-              <option value={apt.id} selected={filterApartmentId === apt.id}>
-                {apt.name}
-              </option>
-            ))}
-          </select>
-        </form>
+    <!-- Tabovi i filter -->
+    <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+      <div class="flex gap-1 bg-gray-100 rounded-lg p-1">
+        {[
+          { key: 'sve', label: 'Sve' },
+          { key: 'izdani', label: 'Izdani računi' },
+          { key: 'za_izdati', label: 'Za izdati' },
+        ].map((t) => (
+          <a
+            href={`/racuni?tab=${t.key}${filterApartmentId ? `&apartment_id=${filterApartmentId}` : ''}`}
+            class={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+              activeTab === t.key ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >{t.label}</a>
+        ))}
       </div>
-
-      <!-- Tabovi -->
-      <div class="flex gap-1 bg-gray-100 rounded-lg p-1 sm:ml-auto">
-        <a
-          href={`/racuni?tab=sve${filterApartmentId ? `&apartment_id=${filterApartmentId}` : ''}`}
-          class={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${activeTab === 'sve' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}
+      <form method="GET" action="/racuni" id="filter-form">
+        <input type="hidden" name="tab" value={activeTab} />
+        <select
+          name="apartment_id"
+          onchange="document.getElementById('filter-form').submit()"
+          class="input py-1.5 text-sm w-auto"
         >
-          Sve završene
-        </a>
-        <a
-          href={`/racuni?tab=izdani${filterApartmentId ? `&apartment_id=${filterApartmentId}` : ''}`}
-          class={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${activeTab === 'izdani' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}
-        >
-          Izdani računi
-        </a>
-        <a
-          href={`/racuni?tab=za_izdati${filterApartmentId ? `&apartment_id=${filterApartmentId}` : ''}`}
-          class={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${activeTab === 'za_izdati' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}
-        >
-          Za izdati
-        </a>
-      </div>
+          <option value="">Svi apartmani</option>
+          {adminApartments.map((apt) => (
+            <option value={apt.id} selected={filterApartmentId === apt.id}>{apt.name}</option>
+          ))}
+        </select>
+      </form>
     </div>
 
     <!-- Tablica -->
@@ -175,81 +134,81 @@ const error = Astro.url.searchParams.get('error');
       <div class="card p-12 text-center">
         <div class="text-gray-400 mb-4">
           <svg class="mx-auto h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+              d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
           </svg>
         </div>
-        <h3 class="text-lg font-medium text-gray-900 mb-2">Nema zapisa</h3>
+        <h3 class="text-lg font-medium text-gray-900 mb-2">Nema rezervacija</h3>
         <p class="text-gray-500">
-          {activeTab === 'sve' && 'Nema završenih rezervacija.'}
+          {activeTab === 'za_izdati' && 'Sve rezervacije imaju izdan račun.'}
           {activeTab === 'izdani' && 'Nema izdanih računa.'}
-          {activeTab === 'za_izdati' && 'Sve završene rezervacije imaju generiran račun.'}
+          {activeTab === 'sve' && 'Nema rezervacija.'}
         </p>
       </div>
     ) : (
-      <div class="table-wrapper">
-        <table class="w-full text-sm">
+      <div class="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
+        <table class="text-sm" style="min-width: 900px; width: 100%;">
           <thead>
             <tr>
-              <th class="table-head">Broj računa</th>
-              <th class="table-head">Gost</th>
-              <th class="table-head">Check-in</th>
-              <th class="table-head">Check-out</th>
-              <th class="table-head">Iznos (Bruto EUR)</th>
-              <th class="table-head">Datum generiranja</th>
-              <th class="table-head">Akcija</th>
+              <th class="table-head px-4 py-3 text-left">Gost</th>
+              <th class="table-head px-4 py-3 text-left">Apartman</th>
+              <th class="table-head px-4 py-3 text-left whitespace-nowrap">Check-in</th>
+              <th class="table-head px-4 py-3 text-left whitespace-nowrap">Check-out</th>
+              <th class="table-head px-4 py-3 text-right">Iznos</th>
+              <th class="table-head px-4 py-3 text-left whitespace-nowrap">Broj računa</th>
+              <th class="table-head px-4 py-3 text-left">Akcije</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-100">
-            {reservations.map((res) => {
-              const invoice = invoiceByReservation.get(res.id);
-              const aptId = res.apartment_id;
-              const aptName = res.apartments?.name ?? '';
-              const nextNum = getNextInvoiceNumber(aptId);
-              const lastNum = getLastInvoiceNumber(aptId);
+            {reservations.map((r) => {
+              const invoice = invoiceByReservation.get(r.id);
+              const color = aptColorMap.get(r.apartment_id) ?? '#3B82F6';
+              const aptName = aptNameMap.get(r.apartment_id) ?? '—';
+              const lastInvoice = lastInvoiceByApt.get(r.apartment_id) ?? null;
+              const lastInvoiceNote = lastInvoice
+                ? `Zadnji izdani račun za ${aptName} je broj ${lastInvoice}`
+                : `Za ${aptName} još nisu izdani računi`;
               return (
                 <tr class="table-row">
+                  <td class="table-cell font-medium text-gray-900 whitespace-nowrap">{r.guest_name}</td>
                   <td class="table-cell">
-                    {invoice ? (
-                      <span class="font-medium text-gray-900">{invoice.invoice_number_display}</span>
-                    ) : (
-                      <span class="text-gray-400">—</span>
-                    )}
+                    <span
+                      class="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium whitespace-nowrap"
+                      style={`background-color: ${color}20; color: ${color}; box-shadow: inset 0 0 0 1px ${color}40`}
+                    >{aptName}</span>
                   </td>
-                  <td class="table-cell font-medium text-gray-900">{res.guest_name}</td>
-                  <td class="table-cell text-gray-600">{formatDate(res.check_in)}</td>
-                  <td class="table-cell text-gray-600">{formatDate(res.check_out)}</td>
+                  <td class="table-cell text-gray-600 whitespace-nowrap">{formatDate(r.check_in)}</td>
+                  <td class="table-cell text-gray-600 whitespace-nowrap">{formatDate(r.check_out)}</td>
+                  <td class="table-cell text-right font-medium text-gray-900">{formatCurrency(r.amount_gross)}</td>
                   <td class="table-cell">
-                    {res.amount_gross != null ? (
-                      <span class="font-medium text-gray-900">{res.amount_gross.toFixed(2)} EUR</span>
-                    ) : (
-                      <span class="text-gray-400">—</span>
-                    )}
-                  </td>
-                  <td class="table-cell text-gray-600">
-                    {invoice ? formatDateTime(invoice.generated_at) : '—'}
+                    {invoice
+                      ? <span class="font-medium text-gray-900">{invoice.invoice_number_display}</span>
+                      : <span class="text-gray-400">—</span>
+                    }
                   </td>
                   <td class="table-cell">
-                    {invoice ? (
-                      invoice.pdf_url ? (
+                    <div class="flex items-center gap-1 flex-wrap">
+                      {!invoice && (
+                        <button
+                          onclick={`openGenerateModal('${r.id}', '${r.guest_name.replace(/'/g, "\\'")}', ${JSON.stringify(lastInvoiceNote)})`}
+                          class="btn-primary text-xs px-2 py-1 whitespace-nowrap"
+                        >Generiraj račun</button>
+                      )}
+                      {invoice && invoice.pdf_url && (
                         <a
                           href={invoice.pdf_url}
                           target="_blank"
                           rel="noopener noreferrer"
-                          class="btn-ghost text-xs px-3 py-1.5 text-blue-600 hover:text-blue-800"
-                        >
-                          Preuzmi PDF
-                        </a>
-                      ) : (
-                        <span class="text-gray-400 text-xs">PDF nedostupan</span>
-                      )
-                    ) : (
-                      <button
-                        onclick={`openConfirmModal('${res.id}', '${res.guest_name.replace(/'/g, "\\'")}', '${aptName.replace(/'/g, "\\'")}', ${nextNum}, ${lastNum})`}
-                        class="btn-primary text-xs px-3 py-1.5"
-                      >
-                        Generiraj račun
-                      </button>
-                    )}
+                          class="btn-ghost text-xs px-2 py-1 text-blue-600 hover:text-blue-800 whitespace-nowrap"
+                        >Preuzmi PDF</a>
+                      )}
+                      {invoice && (
+                        <button
+                          onclick={`openUploadModal('${invoice.id}', '${r.id}')`}
+                          class="btn-ghost text-xs px-2 py-1 whitespace-nowrap"
+                        >{invoice.pdf_url ? 'Zamijeni PDF' : 'Upload PDF'}</button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               );
@@ -260,279 +219,182 @@ const error = Astro.url.searchParams.get('error');
     )}
   </div>
 
-  <!-- Modal: Postavke generiranja -->
-  <div id="modal-settings" class="hidden modal-overlay" onclick="closeModalOnOverlay(event, 'modal-settings')">
-    <div class="modal-content max-h-[90vh] overflow-y-auto" onclick="event.stopPropagation()">
-      <div class="p-6 border-b border-gray-100">
-        <h2 class="text-lg font-semibold text-gray-900">Postavke generiranja računa</h2>
-        <p class="text-sm text-gray-500 mt-1">Konfigurirajte automatsko generiranje po apartmanu.</p>
-      </div>
-      <form action="/api/racuni/settings" method="POST" class="p-6 space-y-5">
-        {adminApartments.length > 1 && (
-          <div>
-            <label class="label">Apartman *</label>
-            <select
-              name="apartment_id"
-              id="settings-apartment_id"
-              class="input"
-              onchange="updateSettingsForm(this.value)"
-              required
-            >
-              {adminApartments.map((apt) => (
-                <option value={apt.id}>{apt.name}</option>
-              ))}
-            </select>
-          </div>
-        )}
-        {adminApartments.length === 1 && (
-          <input type="hidden" name="apartment_id" value={adminApartments[0].id} />
-        )}
-
-        <div class="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-          <div>
-            <p class="text-sm font-medium text-gray-900">Automatsko generiranje</p>
-            <p class="text-xs text-gray-500 mt-0.5">Automatski generiraj račun pri check-in ili check-out</p>
-          </div>
-          <label class="relative inline-flex items-center cursor-pointer">
-            <input
-              type="checkbox"
-              name="auto_generate"
-              id="settings-auto_generate"
-              class="sr-only peer"
-              onchange="toggleAutoSettings(this.checked)"
-            />
-            <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-          </label>
-        </div>
-
-        <div id="settings-auto-options" class="hidden space-y-3 pl-2">
-          <label class="label">Generiraj na</label>
-          <div class="space-y-2">
-            <label class="flex items-center gap-2 cursor-pointer">
-              <input
-                type="radio"
-                name="generate_on"
-                value="check_in"
-                id="settings-generate_on_checkin"
-                class="h-4 w-4 text-blue-600"
-              />
-              <span class="text-sm text-gray-700">Check-in</span>
-            </label>
-            <label class="flex items-center gap-2 cursor-pointer">
-              <input
-                type="radio"
-                name="generate_on"
-                value="check_out"
-                id="settings-generate_on_checkout"
-                class="h-4 w-4 text-blue-600"
-                checked
-              />
-              <span class="text-sm text-gray-700">Check-out</span>
-            </label>
-          </div>
-        </div>
-
-        <div>
-          <label class="label">Početni broj računa</label>
-          <input
-            type="number"
-            name="starting_number"
-            id="settings-starting_number"
-            min="1"
-            class="input"
-            placeholder="1"
-            value="1"
-          />
-          <p class="text-xs text-gray-500 mt-1">Broj od kojeg počinje numeracija (ako još nema generiranih računa).</p>
-        </div>
-
-        <div class="flex justify-end gap-3 pt-2">
-          <button
-            type="button"
-            onclick="document.getElementById('modal-settings').classList.add('hidden')"
-            class="btn-secondary"
-          >
-            Odustani
-          </button>
-          <button type="submit" class="btn-primary">Spremi</button>
-        </div>
-      </form>
-    </div>
-  </div>
-
-  <!-- Modal: Potvrda generiranja -->
-  <div id="modal-confirm" class="hidden modal-overlay" onclick="closeModalOnOverlay(event, 'modal-confirm')">
+  <!-- Modal: Generiraj račun -->
+  <div id="modal-generate" class="hidden modal-overlay" onclick="closeModalOnOverlay(event, 'modal-generate')">
     <div class="modal-content p-6" onclick="event.stopPropagation()">
-      <h2 class="text-lg font-semibold text-gray-900 mb-2">Potvrda generiranja računa</h2>
+      <h2 class="text-lg font-semibold text-gray-900 mb-1">Generiraj račun</h2>
+      <p class="text-sm text-gray-500 mb-4" id="gen-guest-name"></p>
 
-      <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
-        <p class="text-sm text-blue-800">
-          Predloženi broj računa: <strong id="confirm-next-number" class="text-lg"></strong>
-        </p>
+      <div id="gen-last-note" class="rounded-lg bg-blue-50 border border-blue-200 p-3 mb-4">
+        <p class="text-sm text-blue-800" id="gen-last-note-text"></p>
       </div>
 
-      <p class="text-sm text-gray-600 mb-1" id="confirm-last-info"></p>
-      <p class="text-sm text-gray-500 mb-6">
-        Generirat će se račun za gosta: <strong id="confirm-guest-name"></strong>
-      </p>
+      <div id="gen-error" class="hidden rounded-lg bg-red-50 border border-red-200 p-3 mb-4">
+        <p class="text-sm text-red-600" id="gen-error-text"></p>
+      </div>
 
-      <div id="confirm-error" class="hidden mb-4 rounded-lg bg-red-50 border border-red-200 p-3">
-        <p class="text-sm text-red-600" id="confirm-error-msg"></p>
+      <div class="mb-4">
+        <label class="label">Broj računa *</label>
+        <input id="gen-invoice-number" type="text" class="input" placeholder="npr. 2024-001" />
+        <p class="text-xs text-gray-400 mt-1">Unesite broj u formatu koji koristite.</p>
       </div>
 
       <div class="flex justify-end gap-3">
-        <button
-          type="button"
-          onclick="document.getElementById('modal-confirm').classList.add('hidden')"
-          class="btn-secondary"
-        >
-          Odustani
-        </button>
-        <button
-          type="button"
-          id="btn-confirm-generate"
-          onclick="generateInvoice()"
-          class="btn-primary"
-        >
-          Potvrdi
-        </button>
+        <button type="button" onclick="document.getElementById('modal-generate').classList.add('hidden')" class="btn-secondary">Odustani</button>
+        <button type="button" id="gen-submit" onclick="submitGenerate()" class="btn-primary">Generiraj</button>
       </div>
     </div>
   </div>
+
+  <!-- Modal: Upload PDF -->
+  <div id="modal-upload" class="hidden modal-overlay" onclick="closeModalOnOverlay(event, 'modal-upload')">
+    <div class="modal-content p-6" onclick="event.stopPropagation()">
+      <h2 class="text-lg font-semibold text-gray-900 mb-4">Upload PDF računa</h2>
+
+      <div id="upload-error" class="hidden rounded-lg bg-red-50 border border-red-200 p-3 mb-4">
+        <p class="text-sm text-red-600" id="upload-error-text"></p>
+      </div>
+
+      <div class="mb-4">
+        <label class="label">PDF datoteka *</label>
+        <input id="upload-file" type="file" accept="application/pdf" class="input py-1.5" />
+      </div>
+
+      <div class="flex justify-end gap-3">
+        <button type="button" onclick="document.getElementById('modal-upload').classList.add('hidden')" class="btn-secondary">Odustani</button>
+        <button type="button" id="upload-submit" onclick="submitUpload()" class="btn-primary">Upload</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="hidden fixed bottom-4 right-4 z-50 rounded-lg px-4 py-3 text-sm font-medium shadow-lg"></div>
 </AppLayout>
 
-<script define:vars={{ invoiceSettingsAll: invoiceSettingsAll ?? [] }}>
-  // ─── Helpers ─────────────────────────────────────────────────────────────────
-
-  function closeModalOnOverlay(event, id) {
-    if (event.target === document.getElementById(id)) {
-      document.getElementById(id)?.classList.add('hidden');
-    }
+<script>
+  function closeModalOnOverlay(event: MouseEvent, id: string) {
+    if (event.target === document.getElementById(id)) document.getElementById(id)?.classList.add('hidden');
   }
 
-  // ─── Modal Postavke ───────────────────────────────────────────────────────────
-
-  function toggleAutoSettings(checked) {
-    const autoOptions = document.getElementById('settings-auto-options');
-    if (checked) {
-      autoOptions?.classList.remove('hidden');
-    } else {
-      autoOptions?.classList.add('hidden');
-    }
+  function showToast(message: string, type: 'success' | 'error' = 'success') {
+    const toast = document.getElementById('toast');
+    if (!toast) return;
+    toast.textContent = message;
+    toast.className = `fixed bottom-4 right-4 z-50 rounded-lg px-4 py-3 text-sm font-medium shadow-lg ${
+      type === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'
+    }`;
+    toast.classList.remove('hidden');
+    setTimeout(() => toast.classList.add('hidden'), 4000);
   }
 
-  function updateSettingsForm(apartmentId) {
-    const settings = invoiceSettingsAll.find((s) => s.apartment_id === apartmentId);
-    if (!settings) {
-      // Reset na defaultove
-      const autoCheckbox = document.getElementById('settings-auto_generate');
-      if (autoCheckbox) autoCheckbox.checked = false;
-      toggleAutoSettings(false);
-      const startingInput = document.getElementById('settings-starting_number');
-      if (startingInput) startingInput.value = '1';
+  // ── Generiraj račun ───────────────────────────────────────────────────────────
+
+  let _genReservationId = '';
+
+  function openGenerateModal(reservationId: string, guestName: string, lastNote: string) {
+    _genReservationId = reservationId;
+    (document.getElementById('gen-guest-name') as HTMLElement).textContent = `Gost: ${guestName}`;
+    (document.getElementById('gen-last-note-text') as HTMLElement).textContent = lastNote;
+    (document.getElementById('gen-invoice-number') as HTMLInputElement).value = '';
+    document.getElementById('gen-error')?.classList.add('hidden');
+    document.getElementById('modal-generate')?.classList.remove('hidden');
+  }
+
+  async function submitGenerate() {
+    const invoiceNumber = (document.getElementById('gen-invoice-number') as HTMLInputElement).value.trim();
+    if (!invoiceNumber) {
+      (document.getElementById('gen-error-text') as HTMLElement).textContent = 'Broj računa je obavezan.';
+      document.getElementById('gen-error')?.classList.remove('hidden');
       return;
     }
-
-    const autoCheckbox = document.getElementById('settings-auto_generate');
-    if (autoCheckbox) {
-      autoCheckbox.checked = settings.auto_generate;
-      toggleAutoSettings(settings.auto_generate);
-    }
-
-    const generateOn = settings.generate_on;
-    const radioCheckin = document.getElementById('settings-generate_on_checkin');
-    const radioCheckout = document.getElementById('settings-generate_on_checkout');
-    if (radioCheckin && radioCheckout) {
-      radioCheckin.checked = generateOn === 'check_in';
-      radioCheckout.checked = generateOn === 'check_out';
-    }
-
-    const startingInput = document.getElementById('settings-starting_number');
-    if (startingInput) {
-      startingInput.value = String(settings.starting_number ?? 1);
-    }
-  }
-
-  // Inicijaliziraj formu za prvi apartman pri otvaranju
-  document.getElementById('modal-settings')?.addEventListener('transitionend', () => {}, { once: true });
-
-  const settingsBtn = document.querySelector('button[onclick*="modal-settings"]');
-  if (settingsBtn) {
-    settingsBtn.addEventListener('click', () => {
-      const selectEl = document.getElementById('settings-apartment_id');
-      const firstAptId = selectEl ? selectEl.value : (invoiceSettingsAll[0]?.apartment_id ?? '');
-      if (firstAptId) {
-        updateSettingsForm(firstAptId);
-      }
-    });
-  }
-
-  // ─── Modal Potvrda generiranja ────────────────────────────────────────────────
-
-  let currentReservationId = '';
-
-  function openConfirmModal(reservationId, guestName, aptName, nextNum, lastNum) {
-    currentReservationId = reservationId;
-
-    document.getElementById('confirm-guest-name').textContent = guestName;
-    document.getElementById('confirm-next-number').textContent = String(nextNum);
-
-    const lastInfo = document.getElementById('confirm-last-info');
-    if (lastNum > 0) {
-      lastInfo.textContent = `Zadnji generirani račun za ${aptName} bio je broj: ${lastNum}`;
-    } else {
-      lastInfo.textContent = `Za apartman "${aptName}" još nisu generirani računi.`;
-    }
-
-    document.getElementById('confirm-error')?.classList.add('hidden');
-    document.getElementById('modal-confirm')?.classList.remove('hidden');
-  }
-
-  async function generateInvoice() {
-    const errorEl = document.getElementById('confirm-error');
-    const errorMsg = document.getElementById('confirm-error-msg');
-    errorEl?.classList.add('hidden');
-
-    const btn = document.getElementById('btn-confirm-generate');
-    btn.disabled = true;
-    btn.textContent = 'Generiranje...';
-
+    const btn = document.getElementById('gen-submit') as HTMLButtonElement;
+    btn.disabled = true; btn.textContent = 'Generiranje...';
     try {
-      const res = await fetch('/api/racuni/generate', {
+      const res = await fetch('/api/racuni/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reservation_id: currentReservationId }),
+        body: JSON.stringify({ reservation_id: _genReservationId, invoice_number_display: invoiceNumber }),
       });
-
       const data = await res.json();
-
       if (!res.ok) {
-        errorMsg.textContent = data.error ?? 'Greška pri generiranju računa.';
-        errorEl?.classList.remove('hidden');
+        (document.getElementById('gen-error-text') as HTMLElement).textContent = data.error ?? 'Greška.';
+        document.getElementById('gen-error')?.classList.remove('hidden');
       } else {
-        document.getElementById('modal-confirm')?.classList.add('hidden');
-        window.location.href = '/racuni?success=generated&tab=izdani';
+        document.getElementById('modal-generate')?.classList.add('hidden');
+        window.location.href = '/racuni?tab=izdani&success=generated';
       }
     } catch {
-      errorMsg.textContent = 'Greška pri generiranju računa.';
-      errorEl?.classList.remove('hidden');
+      (document.getElementById('gen-error-text') as HTMLElement).textContent = 'Greška pri slanju zahtjeva.';
+      document.getElementById('gen-error')?.classList.remove('hidden');
     } finally {
-      btn.disabled = false;
-      btn.textContent = 'Potvrdi';
+      btn.disabled = false; btn.textContent = 'Generiraj';
     }
   }
 
-  // Expose to global scope
-  window.closeModalOnOverlay = closeModalOnOverlay;
-  window.toggleAutoSettings = toggleAutoSettings;
-  window.updateSettingsForm = updateSettingsForm;
-  window.openConfirmModal = openConfirmModal;
-  window.generateInvoice = generateInvoice;
+  // ── Upload PDF ────────────────────────────────────────────────────────────────
 
+  let _uploadInvoiceId = '';
+  let _uploadReservationId = '';
+
+  function openUploadModal(invoiceId: string, reservationId: string) {
+    _uploadInvoiceId = invoiceId;
+    _uploadReservationId = reservationId;
+    (document.getElementById('upload-file') as HTMLInputElement).value = '';
+    document.getElementById('upload-error')?.classList.add('hidden');
+    document.getElementById('modal-upload')?.classList.remove('hidden');
+  }
+
+  async function submitUpload() {
+    const fileInput = document.getElementById('upload-file') as HTMLInputElement;
+    const file = fileInput.files?.[0];
+    if (!file) {
+      (document.getElementById('upload-error-text') as HTMLElement).textContent = 'Odaberite PDF datoteku.';
+      document.getElementById('upload-error')?.classList.remove('hidden');
+      return;
+    }
+    const btn = document.getElementById('upload-submit') as HTMLButtonElement;
+    btn.disabled = true; btn.textContent = 'Uploading...';
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('invoice_id', _uploadInvoiceId);
+      formData.append('reservation_id', _uploadReservationId);
+      const res = await fetch('/api/racuni/upload', { method: 'POST', body: formData });
+      const data = await res.json();
+      if (!res.ok) {
+        (document.getElementById('upload-error-text') as HTMLElement).textContent = data.error ?? 'Greška.';
+        document.getElementById('upload-error')?.classList.remove('hidden');
+      } else {
+        document.getElementById('modal-upload')?.classList.add('hidden');
+        window.location.href = '/racuni?tab=izdani&success=uploaded';
+      }
+    } catch {
+      (document.getElementById('upload-error-text') as HTMLElement).textContent = 'Greška pri uploadu.';
+      document.getElementById('upload-error')?.classList.remove('hidden');
+    } finally {
+      btn.disabled = false; btn.textContent = 'Upload';
+    }
+  }
+
+  // ── Expose globals ────────────────────────────────────────────────────────────
+  (window as any).closeModalOnOverlay = closeModalOnOverlay;
+  (window as any).openGenerateModal = openGenerateModal;
+  (window as any).submitGenerate = submitGenerate;
+  (window as any).openUploadModal = openUploadModal;
+  (window as any).submitUpload = submitUpload;
+
+  // Toast iz URL
   const _p = new URLSearchParams(window.location.search);
-  const _s = _p.get('success'), _e = _p.get('error');
-  const _m: Record<string, string> = { settings_saved: 'Postavke su uspješno spremljene.', generated: 'Račun je uspješno generiran.' };
-  if (_s && _m[_s]) showToast(_m[_s], 'success');
+  const _s = _p.get('success');
+  const _e = _p.get('error');
+  const _msgs: Record<string, string> = {
+    generated: 'Račun je uspješno kreiran.',
+    uploaded: 'PDF je uspješno uploadан.',
+  };
+  if (_s && _msgs[_s]) showToast(_msgs[_s]);
   if (_e) showToast(decodeURIComponent(_e), 'error');
-  if (_s || _e) { const _url = new URL(window.location.href); _url.searchParams.delete('success'); _url.searchParams.delete('error'); history.replaceState({}, '', _url.toString()); }
+  if (_s || _e) {
+    const _u = new URL(window.location.href);
+    _u.searchParams.delete('success'); _u.searchParams.delete('error');
+    history.replaceState({}, '', _u.toString());
+  }
 </script>
