@@ -36,17 +36,17 @@ const dateFrom = Astro.url.searchParams.get('date_from') ?? '';
 const dateTo = Astro.url.searchParams.get('date_to') ?? '';
 
 // Izračunaj date range
-const today = new Date();
-today.setHours(0, 0, 0, 0);
+const TZ = 'Europe/Zagreb';
+const today = new Date(new Date().toLocaleDateString('sv-SE', { timeZone: TZ }) + 'T00:00:00');
 let qFrom: string | null = null;
 let qTo: string | null = null;
 
 if (period === 'this_month') {
-  qFrom = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split('T')[0];
-  qTo = new Date(today.getFullYear(), today.getMonth() + 1, 0).toISOString().split('T')[0];
+  qFrom = new Date(today.getFullYear(), today.getMonth(), 1).toLocaleDateString('sv-SE', { timeZone: TZ });
+  qTo = new Date(today.getFullYear(), today.getMonth() + 1, 0).toLocaleDateString('sv-SE', { timeZone: TZ });
 } else if (period === 'last_month') {
-  qFrom = new Date(today.getFullYear(), today.getMonth() - 1, 1).toISOString().split('T')[0];
-  qTo = new Date(today.getFullYear(), today.getMonth(), 0).toISOString().split('T')[0];
+  qFrom = new Date(today.getFullYear(), today.getMonth() - 1, 1).toLocaleDateString('sv-SE', { timeZone: TZ });
+  qTo = new Date(today.getFullYear(), today.getMonth(), 0).toLocaleDateString('sv-SE', { timeZone: TZ });
 } else if (period === 'custom') {
   qFrom = dateFrom || null;
   qTo = dateTo || null;

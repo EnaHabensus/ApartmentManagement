@@ -41,17 +41,20 @@ const apartmentIds = apartments.map((a) => a.id);
 const filteredAptIds = aptFilter === 'all' ? apartmentIds : [aptFilter];
 
 // Izračunaj datum range za period filter
-const today = new Date();
-today.setHours(0, 0, 0, 0);
+// Koristimo Europe/Zagreb timezone da dobijemo ispravni današnji datum na serveru (UTC)
+const TZ = 'Europe/Zagreb';
+const todayStr = new Date().toLocaleDateString('sv-SE', { timeZone: TZ }); // YYYY-MM-DD
+const today = new Date(todayStr + 'T00:00:00');
+
 let dateFrom: string | null = null;
 let dateTo: string | null = null;
 
 if (period === 'this_month') {
-  dateFrom = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split('T')[0];
-  dateTo = new Date(today.getFullYear(), today.getMonth() + 1, 0).toISOString().split('T')[0];
+  dateFrom = new Date(today.getFullYear(), today.getMonth(), 1).toLocaleDateString('sv-SE', { timeZone: TZ });
+  dateTo = new Date(today.getFullYear(), today.getMonth() + 1, 0).toLocaleDateString('sv-SE', { timeZone: TZ });
 } else if (period === 'last_month') {
-  dateFrom = new Date(today.getFullYear(), today.getMonth() - 1, 1).toISOString().split('T')[0];
-  dateTo = new Date(today.getFullYear(), today.getMonth(), 0).toISOString().split('T')[0];
+  dateFrom = new Date(today.getFullYear(), today.getMonth() - 1, 1).toLocaleDateString('sv-SE', { timeZone: TZ });
+  dateTo = new Date(today.getFullYear(), today.getMonth(), 0).toLocaleDateString('sv-SE', { timeZone: TZ });
 }
 
 // Dohvati rezervacije za KPI
@@ -67,7 +70,6 @@ if (dateTo) query = query.lte('check_in', dateTo);
 const { data: reservations } = await query;
 
 // KPI izračuni
-const todayStr = today.toISOString().split('T')[0];
 const activeRez = reservations ?? [];
 const bruttoSum = activeRez.reduce((s, r) => s + (r.amount_gross ?? 0), 0);
 const nettoSum = activeRez.reduce((s, r) => s + ((r.amount_gross ?? 0) - (r.commission ?? 0)), 0);
