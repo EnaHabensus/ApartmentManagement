@@ -182,7 +182,12 @@ function formatCurrency(n: number): string {
                     {e.title}
                     {e.notes && <div class="text-xs text-gray-400 mt-0.5 truncate max-w-xs">{e.notes}</div>}
                   </td>
-                  <td class="table-cell text-gray-500">{catMap.get(e.category_id) ?? '—'}</td>
+                  <td class="table-cell">
+                    {catMap.get(e.category_id)
+                      ? <span class="inline-flex items-center rounded-md bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 ring-1 ring-inset ring-blue-700/10 whitespace-nowrap">{catMap.get(e.category_id)}</span>
+                      : <span class="text-gray-400">—</span>
+                    }
+                  </td>
                   <td class="table-cell">
                     <span
                       class="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium whitespace-nowrap"
@@ -193,7 +198,23 @@ function formatCurrency(n: number): string {
                   </td>
                   <td class="table-cell text-gray-500 whitespace-nowrap">{formatDate(e.expense_date)}</td>
                   <td class="table-cell text-right font-medium text-gray-900">{formatCurrency(e.amount)}</td>
-                  <td class="table-cell text-gray-500">{createdByMap.get(e.created_by) ?? '—'}</td>
+                  <td class="table-cell">
+                    {createdByMap.get(e.created_by)
+                      ? (() => {
+                          const name = createdByMap.get(e.created_by)!;
+                          const initials = name.split(' ').slice(0, 2).map((n: string) => n[0]?.toUpperCase() ?? '').join('');
+                          return (
+                            <div class="flex items-center gap-2">
+                              <div class="h-6 w-6 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
+                                <span class="text-blue-700 text-xs font-semibold">{initials}</span>
+                              </div>
+                              <span class="text-sm text-gray-700 whitespace-nowrap">{name}</span>
+                            </div>
+                          );
+                        })()
+                      : <span class="text-gray-400">—</span>
+                    }
+                  </td>
                   {isAdmin && (
                     <td class="table-cell">
                       <div class="flex items-center gap-1">
