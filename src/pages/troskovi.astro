@@ -1,0 +1,579 @@
+---
+import AppLayout from '../layouts/AppLayout.astro';
+import { createSupabaseServerClient, createSupabaseAdminClient } from '../lib/supabase';
+
+const supabase = createSupabaseServerClient(Astro.request, Astro.cookies);
+const { data: { user } } = await supabase.auth.getUser();
+if (!user) return Astro.redirect('/login');
+
+const profile = Astro.locals.user!;
+const adminSupabase = createSupabaseAdminClient();
+
+const { data: myApartmentUsers } = await adminSupabase
+  .from('apartment_users')
+  .select('apartment_id, role')
+  .eq('user_id', user.id);
+
+const isAdmin = (myApartmentUsers ?? []).some((au) => au.role === 'admin');
+const adminApartmentIds = (myApartmentUsers ?? []).filter((au) => au.role === 'admin').map((au) => au.apartment_id);
+const allApartmentIds = (myApartmentUsers ?? []).map((au) => au.apartment_id);
+
+if (allApartmentIds.length === 0) return Astro.redirect('/');
+
+// Dohvati apartmane
+const { data: apartmentsData } = await adminSupabase
+  .from('apartments')
+  .select('id, name, color')
+  .in('id', allApartmentIds)
+  .eq('is_deleted', false);
+const allApartments = apartmentsData ?? [];
+const adminApartments = allApartments.filter((a) => adminApartmentIds.includes(a.id));
+const aptColorMap = new Map(allApartments.map((a) => [a.id, (a as any).color as string ?? '#3B82F6']));
+const aptNameMap = new Map(allApartments.map((a) => [a.id, a.name]));
+
+// Dohvati kategorije
+const { data: categoriesData } = await adminSupabase
+  .from('expense_categories')
+  .select('id, name')
+  .order('name');
+const categories = categoriesData ?? [];
+
+// URL parametri
+const filterApartmentId = Astro.url.searchParams.get('apartment_id') ?? '';
+const filterCategoryId = Astro.url.searchParams.get('category_id') ?? '';
+const success = Astro.url.searchParams.get('success');
+const error = Astro.url.searchParams.get('error');
+
+// Dohvati troškove
+const aptIds = filterApartmentId ? [filterApartmentId] : (isAdmin ? adminApartmentIds : allApartmentIds);
+
+let expensesQuery = adminSupabase
+  .from('expenses')
+  .select('*')
+  .in('apartment_id', aptIds.length > 0 ? aptIds : ['none'])
+  .order('expense_date', { ascending: false });
+
+if (filterCategoryId) expensesQuery = expensesQuery.eq('category_id', filterCategoryId);
+
+const { data: expensesRaw } = await expensesQuery;
+const expenses = expensesRaw ?? [];
+
+// Dohvati profile za "created_by"
+const createdByIds = [...new Set(expenses.map((e) => e.created_by))];
+const { data: createdByProfiles } = createdByIds.length > 0
+  ? await adminSupabase.from('profiles').select('id, full_name').in('id', createdByIds)
+  : { data: [] };
+const createdByMap = new Map((createdByProfiles ?? []).map((p) => [p.id, p.full_name]));
+
+// Kategorija map
+const catMap = new Map(categories.map((c) => [c.id, c.name]));
+
+// KPI
+const totalAmount = expenses.reduce((s, e) => s + (e.amount ?? 0), 0);
+
+// Dohvati korisnike po apartmanu za dropdown
+const { data: allAptUsers } = await adminSupabase
+  .from('apartment_users')
+  .select('apartment_id, user_id')
+  .in('apartment_id', adminApartmentIds.length > 0 ? adminApartmentIds : ['none']);
+const aptUserIds = [...new Set((allAptUsers ?? []).map((u) => u.user_id))];
+const { data: aptUserProfiles } = aptUserIds.length > 0
+  ? await adminSupabase.from('profiles').select('id, full_name').in('id', aptUserIds)
+  : { data: [] };
+const aptUserProfileMap = new Map((aptUserProfiles ?? []).map((p) => [p.id, p.full_name]));
+const aptUsersMap: Record<string, Array<{ user_id: string; full_name: string }>> = {};
+for (const au of (allAptUsers ?? [])) {
+  if (!aptUsersMap[au.apartment_id]) aptUsersMap[au.apartment_id] = [];
+  aptUsersMap[au.apartment_id].push({ user_id: au.user_id, full_name: aptUserProfileMap.get(au.user_id) ?? '?' });
+}
+
+function formatDate(d: string): string {
+  const [y, m, day] = d.split('-');
+  return `${day}.${m}.${y}`;
+}
+
+function formatCurrency(n: number): string {
+  return new Intl.NumberFormat('hr-HR', { style: 'currency', currency: 'EUR' }).format(n);
+}
+---
+
+<AppLayout title="Troškovi" user={profile} isAdmin={isAdmin} activeRoute="/troskovi">
+  <div class="p-6 max-w-7xl mx-auto">
+
+    <!-- Header -->
+    <div class="flex items-center justify-between mb-6">
+      <div>
+        <h1 class="text-2xl font-bold text-gray-900">Troškovi</h1>
+        <p class="text-gray-500 text-sm mt-1">{expenses.length} trošak{expenses.length === 1 ? '' : expenses.length < 5 ? 'a' : 'a'}</p>
+      </div>
+      {isAdmin && (
+        <button onclick="openAddModal()" class="btn-primary">+ Dodaj trošak</button>
+      )}
+    </div>
+
+    <!-- KPI -->
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+      <div class="card p-4">
+        <p class="text-xs font-medium text-gray-500 mb-1">Ukupni troškovi</p>
+        <p class="text-xl font-bold text-gray-900">{formatCurrency(totalAmount)}</p>
+      </div>
+      <div class="card p-4">
+        <p class="text-xs font-medium text-gray-500 mb-1">Broj troškova</p>
+        <p class="text-xl font-bold text-gray-900">{expenses.length}</p>
+      </div>
+      <div class="card p-4">
+        <p class="text-xs font-medium text-gray-500 mb-1">Prosječni trošak</p>
+        <p class="text-xl font-bold text-gray-900">{expenses.length ? formatCurrency(totalAmount / expenses.length) : '—'}</p>
+      </div>
+    </div>
+
+    <!-- Filteri -->
+    <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+      <div></div>
+      <form method="GET" action="/troskovi" id="filter-form" class="flex flex-wrap gap-2">
+        <select name="apartment_id" onchange="document.getElementById('filter-form').submit()" class="input py-1.5 text-sm w-auto">
+          <option value="">Svi apartmani</option>
+          {allApartments.map((apt) => (
+            <option value={apt.id} selected={filterApartmentId === apt.id}>{apt.name}</option>
+          ))}
+        </select>
+        <select name="category_id" onchange="document.getElementById('filter-form').submit()" class="input py-1.5 text-sm w-auto">
+          <option value="">Sve kategorije</option>
+          {categories.map((c) => (
+            <option value={c.id} selected={filterCategoryId === c.id}>{c.name}</option>
+          ))}
+        </select>
+        {filterApartmentId && <input type="hidden" name="apartment_id" value={filterApartmentId} />}
+      </form>
+    </div>
+
+    <!-- Tablica -->
+    {expenses.length === 0 ? (
+      <div class="card p-12 text-center">
+        <div class="text-gray-400 mb-4">
+          <svg class="mx-auto h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+              d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 11h.01M12 11h.01M15 11h.01M4 19h16a2 2 0 002-2V7a2 2 0 00-2-2H4a2 2 0 00-2 2v10a2 2 0 002 2z" />
+          </svg>
+        </div>
+        <h3 class="text-lg font-medium text-gray-900 mb-2">Nema troškova</h3>
+        <p class="text-gray-500">Dodajte prvi trošak klikom na gumb gore desno.</p>
+      </div>
+    ) : (
+      <div class="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
+        <table class="text-sm" style="min-width: 800px; width: 100%;">
+          <thead>
+            <tr>
+              <th class="table-head px-4 py-3 text-left">Naziv</th>
+              <th class="table-head px-4 py-3 text-left">Kategorija</th>
+              <th class="table-head px-4 py-3 text-left">Apartman</th>
+              <th class="table-head px-4 py-3 text-left whitespace-nowrap">Datum</th>
+              <th class="table-head px-4 py-3 text-right">Iznos</th>
+              <th class="table-head px-4 py-3 text-left">Osoba</th>
+              {isAdmin && <th class="table-head px-4 py-3"></th>}
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100">
+            {expenses.map((e) => {
+              const color = aptColorMap.get(e.apartment_id) ?? '#3B82F6';
+              return (
+                <tr class="table-row" id={`row-${e.id}`}>
+                  <td class="table-cell font-medium text-gray-900">
+                    {e.title}
+                    {e.notes && <div class="text-xs text-gray-400 mt-0.5 truncate max-w-xs">{e.notes}</div>}
+                  </td>
+                  <td class="table-cell text-gray-500">{catMap.get(e.category_id) ?? '—'}</td>
+                  <td class="table-cell">
+                    <span
+                      class="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium whitespace-nowrap"
+                      style={`background-color: ${color}20; color: ${color}; box-shadow: inset 0 0 0 1px ${color}40`}
+                    >
+                      {aptNameMap.get(e.apartment_id) ?? '—'}
+                    </span>
+                  </td>
+                  <td class="table-cell text-gray-500 whitespace-nowrap">{formatDate(e.expense_date)}</td>
+                  <td class="table-cell text-right font-medium text-gray-900">{formatCurrency(e.amount)}</td>
+                  <td class="table-cell text-gray-500">{createdByMap.get(e.created_by) ?? '—'}</td>
+                  {isAdmin && (
+                    <td class="table-cell">
+                      <div class="flex items-center gap-1">
+                        <button
+                          onclick={`openEditModal(${JSON.stringify({
+                            id: e.id,
+                            apartment_id: e.apartment_id,
+                            category_id: e.category_id ?? '',
+                            title: e.title,
+                            amount: e.amount,
+                            expense_date: e.expense_date,
+                            created_by: e.created_by,
+                            notes: e.notes ?? '',
+                          })})`}
+                          class="btn-ghost text-xs px-2 py-1"
+                        >Uredi</button>
+                        <button
+                          onclick={`confirmDelete('${e.id}', '${e.title.replace(/'/g, "\\'")}')`}
+                          class="btn-ghost text-xs px-2 py-1 text-red-500 hover:bg-red-50 hover:text-red-700"
+                        >Obriši</button>
+                      </div>
+                    </td>
+                  )}
+                </tr>
+              );
+            })}
+          </tbody>
+          <!-- Footer s ukupno -->
+          <tfoot>
+            <tr class="bg-gray-50 border-t-2 border-gray-200">
+              <td class="px-4 py-3 text-sm font-semibold text-gray-700" colspan="4">Ukupno</td>
+              <td class="px-4 py-3 text-sm font-bold text-gray-900 text-right">{formatCurrency(totalAmount)}</td>
+              <td colspan="2"></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    )}
+  </div>
+
+  {/* ── Modali (samo admin) ── */}
+  {isAdmin && (
+    <>
+      {/* Modal: Dodaj trošak */}
+      <div id="modal-add" class="hidden modal-overlay" onclick="closeModalOnOverlay(event, 'modal-add')">
+        <div class="modal-content max-h-[90vh] overflow-y-auto" onclick="event.stopPropagation()">
+          <div class="p-6 border-b border-gray-100">
+            <h2 class="text-lg font-semibold text-gray-900">Dodaj trošak</h2>
+          </div>
+          <form id="form-add" class="p-6 space-y-4">
+            <div id="add-error" class="hidden rounded-lg bg-red-50 border border-red-200 p-3">
+              <p class="text-sm text-red-600" id="add-error-text"></p>
+            </div>
+            <div>
+              <label class="label">Naziv troška *</label>
+              <input name="title" type="text" required class="input" placeholder="npr. Račun za struju" />
+            </div>
+            <div class="grid grid-cols-2 gap-4">
+              <div>
+                <label class="label">Iznos (EUR) *</label>
+                <input name="amount" type="number" min="0" step="0.01" required class="input" placeholder="0.00" />
+              </div>
+              <div>
+                <label class="label">Datum *</label>
+                <input name="expense_date" type="date" required class="input" />
+              </div>
+            </div>
+            <div>
+              <label class="label">Apartman *</label>
+              <select name="apartment_id" id="add-apartment_id" required class="input" onchange="onAddAptChange(this.value)">
+                <option value="">Odaberi apartman...</option>
+                {adminApartments.map((apt) => (
+                  <option value={apt.id}>{apt.name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label class="label">Kategorija</label>
+              <div class="flex gap-2">
+                <select name="category_id" id="add-category_id" class="input flex-1">
+                  <option value="">— Bez kategorije —</option>
+                  {categories.map((c) => (
+                    <option value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+                <button type="button" onclick="openNewCategoryModal('add')" class="btn-secondary text-sm px-3 whitespace-nowrap">+ Nova</button>
+              </div>
+            </div>
+            <div>
+              <label class="label">Osoba *</label>
+              <select name="created_by" id="add-created_by" required class="input">
+                <option value="">Odaberi osobu...</option>
+              </select>
+            </div>
+            <div>
+              <label class="label">Napomena</label>
+              <textarea name="notes" class="input" rows="2" placeholder="Opcionalno..."></textarea>
+            </div>
+            <div class="flex justify-end gap-3 pt-2">
+              <button type="button" onclick="document.getElementById('modal-add').classList.add('hidden')" class="btn-secondary">Odustani</button>
+              <button type="submit" id="add-submit" class="btn-primary">Spremi</button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      {/* Modal: Uredi trošak */}
+      <div id="modal-edit" class="hidden modal-overlay" onclick="closeModalOnOverlay(event, 'modal-edit')">
+        <div class="modal-content max-h-[90vh] overflow-y-auto" onclick="event.stopPropagation()">
+          <div class="p-6 border-b border-gray-100">
+            <h2 class="text-lg font-semibold text-gray-900">Uredi trošak</h2>
+          </div>
+          <form id="form-edit" class="p-6 space-y-4">
+            <div id="edit-error" class="hidden rounded-lg bg-red-50 border border-red-200 p-3">
+              <p class="text-sm text-red-600" id="edit-error-text"></p>
+            </div>
+            <input type="hidden" name="id" id="edit-id" />
+            <div>
+              <label class="label">Naziv troška *</label>
+              <input id="edit-title" name="title" type="text" required class="input" />
+            </div>
+            <div class="grid grid-cols-2 gap-4">
+              <div>
+                <label class="label">Iznos (EUR) *</label>
+                <input id="edit-amount" name="amount" type="number" min="0" step="0.01" required class="input" />
+              </div>
+              <div>
+                <label class="label">Datum *</label>
+                <input id="edit-expense_date" name="expense_date" type="date" required class="input" />
+              </div>
+            </div>
+            <div>
+              <label class="label">Apartman *</label>
+              <select id="edit-apartment_id" name="apartment_id" required class="input" onchange="onEditAptChange(this.value)">
+                <option value="">Odaberi apartman...</option>
+                {adminApartments.map((apt) => (
+                  <option value={apt.id}>{apt.name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label class="label">Kategorija</label>
+              <div class="flex gap-2">
+                <select id="edit-category_id" name="category_id" class="input flex-1">
+                  <option value="">— Bez kategorije —</option>
+                  {categories.map((c) => (
+                    <option value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+                <button type="button" onclick="openNewCategoryModal('edit')" class="btn-secondary text-sm px-3 whitespace-nowrap">+ Nova</button>
+              </div>
+            </div>
+            <div>
+              <label class="label">Osoba *</label>
+              <select id="edit-created_by" name="created_by" required class="input">
+                <option value="">Odaberi osobu...</option>
+              </select>
+            </div>
+            <div>
+              <label class="label">Napomena</label>
+              <textarea id="edit-notes" name="notes" class="input" rows="2"></textarea>
+            </div>
+            <div class="flex items-center justify-between pt-2">
+              <button type="button" onclick="confirmDelete(document.getElementById('edit-id').value, document.getElementById('edit-title').value)" class="btn-danger">Obriši</button>
+              <div class="flex gap-3">
+                <button type="button" onclick="document.getElementById('modal-edit').classList.add('hidden')" class="btn-secondary">Odustani</button>
+                <button type="submit" id="edit-submit" class="btn-primary">Spremi promjene</button>
+              </div>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      {/* Modal: Nova kategorija */}
+      <div id="modal-category" class="hidden modal-overlay" onclick="closeModalOnOverlay(event, 'modal-category')" style="z-index: 60;">
+        <div class="modal-content p-6" onclick="event.stopPropagation()">
+          <h2 class="text-lg font-semibold text-gray-900 mb-4">Nova kategorija</h2>
+          <div id="cat-error" class="hidden rounded-lg bg-red-50 border border-red-200 p-3 mb-4">
+            <p class="text-sm text-red-600" id="cat-error-text"></p>
+          </div>
+          <div>
+            <label class="label">Naziv kategorije *</label>
+            <input id="new-category-name" type="text" class="input" placeholder="npr. Osiguranje" />
+          </div>
+          <div class="flex justify-end gap-3 mt-4">
+            <button type="button" onclick="document.getElementById('modal-category').classList.add('hidden')" class="btn-secondary">Odustani</button>
+            <button type="button" id="cat-submit" onclick="submitNewCategory()" class="btn-primary">Dodaj kategoriju</button>
+          </div>
+        </div>
+      </div>
+
+      {/* Modal: Potvrda brisanja */}
+      <div id="modal-delete" class="hidden modal-overlay" onclick="closeModalOnOverlay(event, 'modal-delete')">
+        <div class="modal-content p-6" onclick="event.stopPropagation()">
+          <h2 class="text-lg font-semibold text-gray-900 mb-2">Obriši trošak</h2>
+          <p class="text-gray-600 mb-1">Jeste li sigurni da želite obrisati trošak <strong id="delete-name"></strong>?</p>
+          <p class="text-sm text-red-600 mb-6">Ova akcija se ne može poništiti.</p>
+          <input type="hidden" id="delete-id" />
+          <div class="flex justify-end gap-3">
+            <button type="button" onclick="document.getElementById('modal-delete').classList.add('hidden')" class="btn-secondary">Odustani</button>
+            <button type="button" onclick="doDelete()" class="btn-danger">Obriši</button>
+          </div>
+        </div>
+      </div>
+    </>
+  )}
+
+  <div id="toast" class="hidden fixed bottom-4 right-4 z-50 rounded-lg px-4 py-3 text-sm font-medium shadow-lg"></div>
+</AppLayout>
+
+<script define:vars={{ aptUsersMap }}>
+  // ── Helpers ──────────────────────────────────────────────────────────────────
+
+  function closeModalOnOverlay(event, id) {
+    if (event.target === document.getElementById(id)) document.getElementById(id).classList.add('hidden');
+  }
+
+  function showToast(message, type = 'success') {
+    const toast = document.getElementById('toast');
+    if (!toast) return;
+    toast.textContent = message;
+    toast.className = `fixed bottom-4 right-4 z-50 rounded-lg px-4 py-3 text-sm font-medium shadow-lg ${
+      type === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'
+    }`;
+    toast.classList.remove('hidden');
+    setTimeout(() => toast.classList.add('hidden'), 3000);
+  }
+
+  function showModalError(divId, txtId, msg) {
+    const div = document.getElementById(divId);
+    const txt = document.getElementById(txtId);
+    if (div && txt) { txt.textContent = msg; div.classList.remove('hidden'); }
+  }
+
+  function setLoading(btnId, loading, defaultText) {
+    const btn = document.getElementById(btnId);
+    if (!btn) return;
+    btn.disabled = loading;
+    btn.textContent = loading ? 'Spremanje...' : defaultText;
+  }
+
+  // ── Dropdown osoba ────────────────────────────────────────────────────────────
+
+  function populatePersonDropdown(selectId, apartmentId, selectedUserId = '') {
+    const select = document.getElementById(selectId);
+    if (!select) return;
+    const users = aptUsersMap[apartmentId] ?? [];
+    select.innerHTML = '<option value="">Odaberi osobu...</option>' +
+      users.map(u => `<option value="${u.user_id}" ${u.user_id === selectedUserId ? 'selected' : ''}>${u.full_name}</option>`).join('');
+  }
+
+  function onAddAptChange(aptId) { populatePersonDropdown('add-created_by', aptId); }
+  function onEditAptChange(aptId) { populatePersonDropdown('edit-created_by', aptId); }
+
+  // ── Modal: Dodaj ─────────────────────────────────────────────────────────────
+
+  function openAddModal() {
+    document.getElementById('form-add').reset();
+    document.getElementById('add-error').classList.add('hidden');
+    document.getElementById('add-created_by').innerHTML = '<option value="">Odaberi osobu...</option>';
+    document.getElementById('modal-add').classList.remove('hidden');
+  }
+
+  document.getElementById('form-add')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    setLoading('add-submit', true, 'Spremi');
+    const res = await fetch('/api/troskovi/create', { method: 'POST', body: new FormData(e.target) });
+    const data = await res.json();
+    setLoading('add-submit', false, 'Spremi');
+    if (!res.ok) { showModalError('add-error', 'add-error-text', data.error ?? 'Greška.'); }
+    else { window.location.href = '/troskovi?success=created'; }
+  });
+
+  // ── Modal: Uredi ─────────────────────────────────────────────────────────────
+
+  function openEditModal(e) {
+    document.getElementById('edit-id').value = e.id;
+    document.getElementById('edit-title').value = e.title;
+    document.getElementById('edit-amount').value = e.amount;
+    document.getElementById('edit-expense_date').value = e.expense_date;
+    document.getElementById('edit-apartment_id').value = e.apartment_id;
+    document.getElementById('edit-category_id').value = e.category_id ?? '';
+    document.getElementById('edit-notes').value = e.notes ?? '';
+    populatePersonDropdown('edit-created_by', e.apartment_id, e.created_by);
+    document.getElementById('edit-error').classList.add('hidden');
+    document.getElementById('modal-edit').classList.remove('hidden');
+  }
+
+  document.getElementById('form-edit')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    setLoading('edit-submit', true, 'Spremi promjene');
+    const res = await fetch('/api/troskovi/update', { method: 'POST', body: new FormData(e.target) });
+    const data = await res.json();
+    setLoading('edit-submit', false, 'Spremi promjene');
+    if (!res.ok) { showModalError('edit-error', 'edit-error-text', data.error ?? 'Greška.'); }
+    else { window.location.href = '/troskovi?success=updated'; }
+  });
+
+  // ── Modal: Nova kategorija ────────────────────────────────────────────────────
+
+  let _categoryTargetModal = 'add';
+
+  function openNewCategoryModal(target) {
+    _categoryTargetModal = target;
+    document.getElementById('new-category-name').value = '';
+    document.getElementById('cat-error').classList.add('hidden');
+    document.getElementById('modal-category').classList.remove('hidden');
+  }
+
+  async function submitNewCategory() {
+    const name = document.getElementById('new-category-name').value.trim();
+    if (!name) { showModalError('cat-error', 'cat-error-text', 'Naziv je obavezan.'); return; }
+    const btn = document.getElementById('cat-submit');
+    btn.disabled = true; btn.textContent = 'Dodavanje...';
+    const res = await fetch('/api/troskovi/create-category', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    });
+    const data = await res.json();
+    btn.disabled = false; btn.textContent = 'Dodaj kategoriju';
+    if (!res.ok) { showModalError('cat-error', 'cat-error-text', data.error ?? 'Greška.'); return; }
+    // Dodaj opciju u oba selecta
+    const opt = new Option(data.category.name, data.category.id, true, true);
+    const addSel = document.getElementById('add-category_id');
+    const editSel = document.getElementById('edit-category_id');
+    if (addSel) addSel.add(opt.cloneNode(true));
+    if (editSel) editSel.add(opt.cloneNode(true));
+    // Selektiraj u ciljnom modalu
+    const targetSel = document.getElementById(`${_categoryTargetModal}-category_id`);
+    if (targetSel) targetSel.value = data.category.id;
+    document.getElementById('modal-category').classList.add('hidden');
+    showToast('Kategorija dodana.');
+  }
+
+  // ── Brisanje ─────────────────────────────────────────────────────────────────
+
+  function confirmDelete(id, title) {
+    document.getElementById('delete-id').value = id;
+    document.getElementById('delete-name').textContent = `"${title}"`;
+    document.getElementById('modal-edit')?.classList.add('hidden');
+    document.getElementById('modal-delete').classList.remove('hidden');
+  }
+
+  async function doDelete() {
+    const id = document.getElementById('delete-id').value;
+    const btn = document.querySelector('#modal-delete .btn-danger');
+    if (btn) { btn.disabled = true; btn.textContent = 'Brisanje...'; }
+    const res = await fetch('/api/troskovi/delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id }),
+    });
+    const data = await res.json();
+    if (res.ok) { window.location.href = '/troskovi?success=deleted'; }
+    else { document.getElementById('modal-delete').classList.add('hidden'); showToast(data.error ?? 'Greška.', 'error'); }
+    if (btn) { btn.disabled = false; btn.textContent = 'Obriši'; }
+  }
+
+  // ── Expose globals ────────────────────────────────────────────────────────────
+  window.closeModalOnOverlay = closeModalOnOverlay;
+  window.openAddModal = openAddModal;
+  window.openEditModal = openEditModal;
+  window.onAddAptChange = onAddAptChange;
+  window.onEditAptChange = onEditAptChange;
+  window.openNewCategoryModal = openNewCategoryModal;
+  window.submitNewCategory = submitNewCategory;
+  window.confirmDelete = confirmDelete;
+  window.doDelete = doDelete;
+
+  // Toast iz URL
+  const _p = new URLSearchParams(window.location.search);
+  const _s = _p.get('success');
+  const _e = _p.get('error');
+  const _msgs = { created: 'Trošak je uspješno dodan.', updated: 'Trošak je uspješno ažuriran.', deleted: 'Trošak je uspješno obrisan.' };
+  if (_s && _msgs[_s]) showToast(_msgs[_s]);
+  if (_e) showToast(decodeURIComponent(_e), 'error');
+  if (_s || _e) {
+    const _u = new URL(window.location.href);
+    _u.searchParams.delete('success'); _u.searchParams.delete('error');
+    history.replaceState({}, '', _u.toString());
+  }
+</script>
