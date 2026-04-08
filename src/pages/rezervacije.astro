@@ -49,7 +49,7 @@ let reservationsQuery = adminSupabase
   .from('reservations')
   .select('*')
   .in('apartment_id', aptIds.length > 0 ? aptIds : ['none'])
-  .order('check_in', { ascending: false });
+  .order('check_in', { ascending: true });
 
 // Filter po tabu
 if (tab === 'otkazane') {
@@ -74,12 +74,8 @@ let reservations = (rawReservations ?? []).filter((r) => {
   return true;
 });
 
-// Sortiraj nadolazeće uzlazno, ostale silazno
-if (tab === 'nadolazece') {
-  reservations = reservations.sort((a, b) => a.check_in.localeCompare(b.check_in));
-} else {
-  reservations = reservations.sort((a, b) => b.check_in.localeCompare(a.check_in));
-}
+// Sortiraj sve uzlazno po check_in (najraniji prvi)
+reservations = reservations.sort((a, b) => a.check_in.localeCompare(b.check_in));
 
 // KPI — dohvati sve rezervacije za statistiku (neovisno o tabu)
 const { data: allReservations } = await adminSupabase
