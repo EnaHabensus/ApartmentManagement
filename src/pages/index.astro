@@ -96,19 +96,6 @@ if (dateFrom && dateTo) {
 }
 const occupancy = Math.min(100, Math.round((reservedDays / totalDays) * 100));
 
-// Nadolazeće rezervacije (sljedećih 5 dana)
-const in5Days = new Date(today);
-in5Days.setDate(in5Days.getDate() + 5);
-const in5DaysStr = in5Days.toISOString().split('T')[0];
-
-const { data: upcoming } = await supabase
-  .from('reservations')
-  .select('*, apartments(name)')
-  .in('apartment_id', filteredAptIds.length ? filteredAptIds : ['none'])
-  .eq('status', 'active')
-  .gte('check_in', todayStr)
-  .lte('check_in', in5DaysStr)
-  .order('check_in');
 
 
 // Check-out danas
@@ -213,11 +200,6 @@ function nights(ci: string, co: string) {
   return Math.round((new Date(co).getTime() - new Date(ci).getTime()) / 86400000);
 }
 
-function getStatus(r: { check_in: string; check_out: string }) {
-  if (r.check_in > todayStr) return { label: 'Nadolazeća', cls: 'badge-blue' };
-  if (r.check_out <= todayStr) return { label: 'Završena', cls: 'badge-gray' };
-  return { label: 'U toku', cls: 'badge-green' };
-}
 ---
 
 <AppLayout title="Dashboard" user={profile} isAdmin={true} activeRoute="/">
@@ -278,50 +260,6 @@ function getStatus(r: { check_in: string; check_out: string }) {
           <p class="text-xl font-bold text-gray-900">{value}</p>
         </div>
       ))}
-    </div>
-
-    <!-- Nadolazeće rezervacije -->
-    <div class="card">
-      <div class="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-        <h2 class="font-semibold text-gray-900">Nadolazeće rezervacije</h2>
-        <a href="/rezervacije" class="text-sm text-blue-600 hover:text-blue-700 font-medium">
-          Vidi sve →
-        </a>
-      </div>
-
-      {!upcoming?.length ? (
-        <div class="p-8 text-center text-gray-400 text-sm">Nema nadolazećih rezervacija u sljedećih 5 dana.</div>
-      ) : (
-        <div class="overflow-x-auto">
-          <table class="w-full">
-            <thead>
-              <tr class="table-head">
-                <th class="table-cell">Gost</th>
-                <th class="table-cell">Check-in</th>
-                <th class="table-cell">Noćenja</th>
-                <th class="table-cell">Br. gostiju</th>
-                <th class="table-cell">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {upcoming.map((r) => {
-                const s = getStatus(r);
-                return (
-                  <tr class="table-row">
-                    <td class="table-cell font-medium">{r.guest_name}</td>
-                    <td class="table-cell">{formatDate(r.check_in)}</td>
-                    <td class="table-cell">{nights(r.check_in, r.check_out)}</td>
-                    <td class="table-cell">{r.num_guests}</td>
-                    <td class="table-cell">
-                      <span class={`badge ${s.cls}`}>{s.label}</span>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
     </div>
 
     <!-- Check-out i Check-in danas -->
