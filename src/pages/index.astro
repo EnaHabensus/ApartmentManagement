@@ -162,6 +162,48 @@ for (const au of (allAptUsers ?? [])) {
   aptUsersForCleaningMap[au.apartment_id].push({ user_id: au.user_id, full_name: aptUserProfileMap.get(au.user_id) ?? '?' });
 }
 
+// ── Grafovi ──────────────────────────────────────────────────────────────────
+
+// Prihodi po načinu plaćanja (koristi iste filtrirane rezervacije)
+const PAYMENT_LABELS: Record<string, string> = {
+  credit_card: 'Kartica',
+  cash: 'Gotovina',
+  bank_transfer: 'Bankovni prijenos',
+  airbnb: 'Airbnb',
+  booking_com: 'Booking.com',
+};
+const PAYMENT_COLORS = ['#FF5A5F', '#003580', '#6366F1', '#10B981', '#F59E0B'];
+
+const prihodiByType: Record<string, number> = {};
+for (const r of activeRez) {
+  const pt = r.payment_type || 'ostalo';
+  prihodiByType[pt] = (prihodiByType[pt] ?? 0) + (r.amount_gross ?? 0);
+}
+const prihodiLabels = Object.keys(prihodiByType).map((k) => PAYMENT_LABELS[k] ?? k);
+const prihodiValues = Object.values(prihodiByType);
+const prihodiColors = Object.keys(prihodiByType).map((k, i) => PAYMENT_COLORS[Object.keys(PAYMENT_LABELS).indexOf(k)] ?? PAYMENT_COLORS[i % PAYMENT_COLORS.length]);
+
+// Čišćenje po osobi (sve rezervacije admin apartmana)
+const { data: allRezForCleaning } = await adminSupabase
+  .from('reservations')
+  .select('id')
+  .in('apartment_id', apartmentIds.length ? apartmentIds : ['none'])
+  .eq('status', 'active');
+const allRezIdList = (allRezForCleaning ?? []).map((r) => r.id);
+const { data: allCleaningData } = allRezIdList.length > 0
+  ? await adminSupabase.from('reservation_cleaning').select('user_id').in('reservation_id', allRezIdList)
+  : { data: [] };
+const cleaningCountMap: Record<string, number> = {};
+for (const c of (allCleaningData ?? [])) {
+  cleaningCountMap[c.user_id] = (cleaningCountMap[c.user_id] ?? 0) + 1;
+}
+const cleaningStatUserIds = Object.keys(cleaningCountMap);
+const { data: cleaningStatProfiles } = cleaningStatUserIds.length > 0
+  ? await adminSupabase.from('profiles').select('id, full_name').in('id', cleaningStatUserIds)
+  : { data: [] };
+const cleaningLabels = (cleaningStatProfiles ?? []).map((p) => p.full_name);
+const cleaningValues = (cleaningStatProfiles ?? []).map((p) => cleaningCountMap[p.id] ?? 0);
+
 function formatDate(d: string) {
   const [y, m, day] = d.split('-');
   return `${day}.${m}.${y}`;
@@ -403,6 +445,54 @@ function getStatus(r: { check_in: string; check_out: string }) {
 
     </div>{/* end grid check-in/out */}
 
+    <!-- Grafovi: Prihodi i Čišćenje -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+
+      <!-- Graf: Prihodi po načinu plaćanja -->
+      <div class="card">
+        <div class="px-5 py-4 border-b border-gray-100">
+          <h2 class="font-semibold text-gray-900">Prihodi po načinu plaćanja</h2>
+          <p class="text-xs text-gray-400 mt-0.5">Raspodjela bruto prihoda</p>
+        </div>
+        <div class="p-5">
+          {prihodiValues.length === 0 ? (
+            <div class="flex items-center justify-center h-48 text-gray-400 text-sm">Nema podataka za odabrani period.</div>
+          ) : (
+            <div class="relative h-64">
+              <canvas
+                id="chart-prihodi"
+                data-labels={JSON.stringify(prihodiLabels)}
+                data-values={JSON.stringify(prihodiValues)}
+                data-colors={JSON.stringify(prihodiColors)}
+              ></canvas>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <!-- Graf: Čišćenja po osobi -->
+      <div class="card">
+        <div class="px-5 py-4 border-b border-gray-100">
+          <h2 class="font-semibold text-gray-900">Čišćenja po osobi</h2>
+          <p class="text-xs text-gray-400 mt-0.5">Ukupan broj dodijeljenih čišćenja</p>
+        </div>
+        <div class="p-5">
+          {cleaningValues.length === 0 ? (
+            <div class="flex items-center justify-center h-48 text-gray-400 text-sm">Nema podataka o čišćenjima.</div>
+          ) : (
+            <div class="relative h-64">
+              <canvas
+                id="chart-ciscenje"
+                data-labels={JSON.stringify(cleaningLabels)}
+                data-values={JSON.stringify(cleaningValues)}
+              ></canvas>
+            </div>
+          )}
+        </div>
+      </div>
+
+    </div>{/* end grid grafovi */}
+
   </div>
 
   <div id="toast" class="hidden fixed bottom-4 right-4 z-50 rounded-lg px-4 py-3 text-sm font-medium shadow-lg"></div>
@@ -439,4 +529,88 @@ function getStatus(r: { check_in: string; check_out: string }) {
   }
 
   (window as any).assignCleaning = assignCleaning;
+</script>
+
+<script>
+  import Chart from 'chart.js/auto';
+
+  // Graf: Prihodi po načinu plaćanja (doughnut)
+  const prihodiCanvas = document.getElementById('chart-prihodi') as HTMLCanvasElement | null;
+  if (prihodiCanvas) {
+    const labels: string[] = JSON.parse(prihodiCanvas.dataset.labels ?? '[]');
+    const values: number[] = JSON.parse(prihodiCanvas.dataset.values ?? '[]');
+    const colors: string[] = JSON.parse(prihodiCanvas.dataset.colors ?? '[]');
+    new Chart(prihodiCanvas, {
+      type: 'doughnut',
+      data: {
+        labels,
+        datasets: [{
+          data: values,
+          backgroundColor: colors,
+          borderWidth: 2,
+          borderColor: '#fff',
+        }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            position: 'bottom',
+            labels: { padding: 16, font: { size: 12 } },
+          },
+          tooltip: {
+            callbacks: {
+              label: (ctx) => {
+                const val = ctx.parsed as number;
+                return ` ${ctx.label}: €${val.toFixed(2)}`;
+              },
+            },
+          },
+        },
+      },
+    });
+  }
+
+  // Graf: Čišćenja po osobi (horizontalni bar)
+  const ciscenjeCanvas = document.getElementById('chart-ciscenje') as HTMLCanvasElement | null;
+  if (ciscenjeCanvas) {
+    const labels: string[] = JSON.parse(ciscenjeCanvas.dataset.labels ?? '[]');
+    const values: number[] = JSON.parse(ciscenjeCanvas.dataset.values ?? '[]');
+    new Chart(ciscenjeCanvas, {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [{
+          label: 'Čišćenja',
+          data: values,
+          backgroundColor: '#6366F1',
+          borderRadius: 6,
+        }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        indexAxis: 'y',
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: (ctx) => ` ${ctx.parsed.x} čišćenja`,
+            },
+          },
+        },
+        scales: {
+          x: {
+            beginAtZero: true,
+            ticks: { stepSize: 1 },
+            grid: { color: '#f3f4f6' },
+          },
+          y: {
+            grid: { display: false },
+          },
+        },
+      },
+    });
+  }
 </script>
