@@ -346,7 +346,9 @@ function formatCurrency(n: number | null): string {
         document.getElementById('gen-error')?.classList.remove('hidden');
       } else {
         document.getElementById('modal-generate')?.classList.add('hidden');
-        window.location.href = '/racuni?tab=izdani&success=generated';
+        const _url = new URL(window.location.href);
+        _url.searchParams.set('success', 'generated');
+        window.location.href = _url.toString();
       }
     } catch {
       (document.getElementById('gen-error-text') as HTMLElement).textContent = 'Greška pri slanju zahtjeva.';
@@ -409,7 +411,9 @@ function formatCurrency(n: number | null): string {
         document.getElementById('upload-error')?.classList.remove('hidden');
       } else {
         document.getElementById('modal-upload')?.classList.add('hidden');
-        window.location.href = '/racuni?tab=izdani&success=uploaded';
+        const _url = new URL(window.location.href);
+        _url.searchParams.set('success', 'uploaded');
+        window.location.href = _url.toString();
       }
     } catch {
       (document.getElementById('upload-error-text') as HTMLElement).textContent = 'Greška pri uploadu.';
@@ -444,7 +448,9 @@ function formatCurrency(n: number | null): string {
         document.getElementById('delete-error')?.classList.remove('hidden');
       } else {
         document.getElementById('modal-delete')?.classList.add('hidden');
-        window.location.href = '/racuni?success=deleted';
+        const _url = new URL(window.location.href);
+        _url.searchParams.set('success', 'deleted');
+        window.location.href = _url.toString();
       }
     } catch {
       (document.getElementById('delete-error-text') as HTMLElement).textContent = 'Greška pri brisanju.';
