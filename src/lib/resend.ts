@@ -1,7 +1,8 @@
 import { Resend } from 'resend';
+import { RESEND_API_KEY, ADMIN_EMAIL } from 'astro:env/server';
 
 export function createResendClient() {
-  return new Resend(import.meta.env.RESEND_API_KEY);
+  return new Resend(RESEND_API_KEY);
 }
 
 const FROM_EMAIL = import.meta.env.FROM_EMAIL || 'onboarding@resend.dev';
@@ -365,12 +366,11 @@ export async function sendNewUserRegisteredEmail({
   newUserEmail: string;
   newUserName: string;
 }) {
-  const adminEmail = import.meta.env.ADMIN_EMAIL;
-  if (!adminEmail) return;
+  if (!ADMIN_EMAIL) return;
   const resend = createResendClient();
   return resend.emails.send({
     from: FROM_EMAIL,
-    to: adminEmail,
+    to: ADMIN_EMAIL,
     subject: `Novi korisnik: ${newUserName} (${newUserEmail})`,
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #111827;">
