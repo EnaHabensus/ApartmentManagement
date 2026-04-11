@@ -15,22 +15,21 @@ const { data: myApartmentUsers } = await adminSupabase
   .eq('user_id', user.id);
 
 const isAdmin = (myApartmentUsers ?? []).some((au) => au.role === 'admin');
+const adminApartmentIds = (myApartmentUsers ?? []).filter((au) => au.role === 'admin').map((au) => au.apartment_id);
 const allApartmentIds = (myApartmentUsers ?? []).map((au) => au.apartment_id);
-
-if (allApartmentIds.length === 0) return Astro.redirect('/');
 
 const filterApartmentId = Astro.url.searchParams.get('apartment_id') ?? '';
 
 const { data: apartmentsData } = await adminSupabase
   .from('apartments')
   .select('id, name, color')
-  .in('id', allApartmentIds)
+  .in('id', adminApartmentIds.length > 0 ? adminApartmentIds : ['none'])
   .eq('is_deleted', false);
 
 const allApartments = apartmentsData ?? [];
 const aptColorMap = Object.fromEntries(allApartments.map((a) => [a.id, { name: a.name, color: (a as any).color ?? '#3B82F6' }]));
 
-const aptIds = filterApartmentId ? [filterApartmentId] : allApartmentIds;
+const aptIds = filterApartmentId ? [filterApartmentId] : adminApartmentIds;
 
 const { data: allCalRez } = await adminSupabase
   .from('reservations')
@@ -48,7 +47,7 @@ const calendarData = (allCalRez ?? []).map((r) => ({
 }));
 ---
 
-<AppLayout title="Kalendar" user={profile} isAdmin={isAdmin} activeRoute="/kalendar">
+<AppLayout title="Kalendar" user={profile} isAdmin={true} activeRoute="/kalendar">
   <div class="p-6 max-w-7xl mx-auto">
 
     <!-- Header -->

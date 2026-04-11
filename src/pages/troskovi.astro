@@ -18,13 +18,11 @@ const isAdmin = (myApartmentUsers ?? []).some((au) => au.role === 'admin');
 const adminApartmentIds = (myApartmentUsers ?? []).filter((au) => au.role === 'admin').map((au) => au.apartment_id);
 const allApartmentIds = (myApartmentUsers ?? []).map((au) => au.apartment_id);
 
-if (allApartmentIds.length === 0) return Astro.redirect('/');
-
 // Dohvati apartmane
 const { data: apartmentsData } = await adminSupabase
   .from('apartments')
   .select('id, name, color')
-  .in('id', allApartmentIds)
+  .in('id', adminApartmentIds.length > 0 ? adminApartmentIds : ['none'])
   .eq('is_deleted', false);
 const allApartments = apartmentsData ?? [];
 const adminApartments = allApartments.filter((a) => adminApartmentIds.includes(a.id));
@@ -45,7 +43,7 @@ const success = Astro.url.searchParams.get('success');
 const error = Astro.url.searchParams.get('error');
 
 // Dohvati troškove
-const aptIds = filterApartmentId ? [filterApartmentId] : (isAdmin ? adminApartmentIds : allApartmentIds);
+const aptIds = filterApartmentId ? [filterApartmentId] : adminApartmentIds;
 
 let expensesQuery = adminSupabase
   .from('expenses')
@@ -97,7 +95,7 @@ function formatCurrency(n: number): string {
 }
 ---
 
-<AppLayout title="Troškovi" user={profile} isAdmin={isAdmin} activeRoute="/troskovi">
+<AppLayout title="Troškovi" user={profile} isAdmin={true} activeRoute="/troskovi">
   <div class="p-6 max-w-7xl mx-auto">
 
     <!-- Header -->
