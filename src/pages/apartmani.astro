@@ -156,8 +156,11 @@ const error = Astro.url.searchParams.get('error');
             {apartments.map((apt) => (
               <div class="card p-5 hover:shadow-md transition-shadow">
                 <div class="flex items-start justify-between mb-3">
-                  <div class="h-10 w-10 rounded-lg bg-blue-50 flex items-center justify-center flex-shrink-0">
-                    <span class="text-blue-600 font-bold text-sm">{(apt as any).name.slice(0, 2).toUpperCase()}</span>
+                  <div class="flex items-center gap-2">
+                    <div class="h-10 w-10 rounded-lg bg-blue-50 flex items-center justify-center flex-shrink-0">
+                      <span class="text-blue-600 font-bold text-sm">{(apt as any).name.slice(0, 2).toUpperCase()}</span>
+                    </div>
+                    <span class="text-xs text-blue-700 bg-blue-100 px-2 py-0.5 rounded-full font-medium">Admin</span>
                   </div>
                   <div class="flex gap-1">
                     <button
