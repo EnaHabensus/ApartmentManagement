@@ -6,6 +6,9 @@ pages_build_output_dir = "./dist"
 [vars]
 # Ove varijable se overridaju u Cloudflare dashboardu za produkciju
 # Lokalno se čitaju iz .dev.vars
+PUBLIC_SUPABASE_URL = "https://fyptpnzzhcxoxldgxyfv.supabase.co"
+PUBLIC_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ5cHRwbnp6aGN4b3hsZGd4eWZ2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUwMzU4NjgsImV4cCI6MjA5MDYxMTg2OH0.75kXBTv4u59vgvZyb7cFHfTnSoGQOQqh8t1PpFMoQK4"
+FROM_EMAIL = "noreply@mojiapartmani.com"
 
 [[kv_namespaces]]
 binding = "SESSION"
