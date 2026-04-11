@@ -7,8 +7,6 @@ pages_build_output_dir = "./dist"
 # Ove varijable se overridaju u Cloudflare dashboardu za produkciju
 # Lokalno se čitaju iz .dev.vars
 
-[[cron_triggers]]
-crons = ["0 8 * * *"]
-# Cron koji se pokreće svakog dana u 8:00 UTC
-# Šalje podsjetnik za čišćenje dan prije check-outa
-# i auto-generira račune
+# Cron se pokreće external HTTP pozivom (npr. cron-job.org ili Cloudflare Worker)
+# koji svaki dan u 8:00 UTC poziva: GET /api/cron/daily
+# s headerom: x-cron-secret: <CRON_SECRET>
