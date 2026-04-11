@@ -68,6 +68,9 @@ export const POST: APIRoute = async ({ request, cookies, redirect }) => {
         adminSupabase.from('profiles').select('id, full_name, email').in('id', assignee_ids),
       ]);
 
+      console.log('[TASK EMAIL] assignee_ids:', assignee_ids);
+      console.log('[TASK EMAIL] profiles:', JSON.stringify(profiles));
+
       const dueDate = due_date.split('-').reverse().join('.');
       for (const profile of profiles ?? []) {
         sendTaskAssignedEmail({
