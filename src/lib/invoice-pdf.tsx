@@ -1,6 +1,7 @@
 // ── Invoice PDF generator — pdf-lib (pure JS, no WASM, works on Cloudflare Workers) ──
 import { PDFDocument, rgb } from 'pdf-lib';
 import fontkit from '@pdf-lib/fontkit';
+import { inflateRawSync } from 'fflate';
 import { INTER_400, INTER_600, INTER_700 } from './invoice-fonts';
 
 // ── Colour palette ────────────────────────────────────────────────────────────
@@ -23,6 +24,79 @@ function dataUriToBytes(uri: string): Uint8Array {
   const raw = atob(b64);
   const out = new Uint8Array(raw.length);
   for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+  return out;
+}
+
+/**
+ * Convert WOFF1 to raw TrueType/OpenType binary.
+ * fontkit can parse TTF directly without needing Node.js zlib, which may
+ * not be fully available in Cloudflare Workers even with nodejs_compat.
+ * We decompress the WOFF table data ourselves using fflate (pure JS).
+ */
+function woff1ToTtf(woff: Uint8Array): Uint8Array {
+  const v = new DataView(woff.buffer, woff.byteOffset);
+  if (v.getUint32(0) !== 0x774F4646) throw new Error('Not a WOFF1 file');
+
+  const sfVersion = v.getUint32(4);
+  const n         = v.getUint16(12);
+
+  type Entry = { tag: number; checksum: number; origLength: number; data: Uint8Array };
+  const tables: Entry[] = [];
+  let p = 44;
+
+  for (let i = 0; i < n; i++) {
+    const tag      = v.getUint32(p);
+    const off      = v.getUint32(p + 4);
+    const compLen  = v.getUint32(p + 8);
+    const origLen  = v.getUint32(p + 12);
+    const checksum = v.getUint32(p + 16);
+    p += 20;
+
+    const raw = woff.subarray(off, off + compLen);
+    let data: Uint8Array = compLen < origLen
+      ? inflateRawSync(raw)          // decompress with fflate (pure JS)
+      : new Uint8Array(raw);         // already uncompressed
+
+    // Pad each table to 4-byte boundary (required by TrueType spec)
+    if (data.length % 4 !== 0) {
+      const padded = new Uint8Array((data.length + 3) & ~3);
+      padded.set(data);
+      data = padded;
+    }
+
+    tables.push({ tag, checksum, origLength: origLen, data });
+  }
+
+  // Build TrueType binary
+  const log2n       = Math.floor(Math.log2(n));
+  const searchRange = (1 << log2n) * 16;
+  const entrySelector = log2n;
+  const rangeShift  = n * 16 - searchRange;
+
+  const dirEnd = 12 + n * 16;
+  const offsets: number[] = [];
+  let totalSize = dirEnd;
+  for (const t of tables) { offsets.push(totalSize); totalSize += t.data.length; }
+
+  const out = new Uint8Array(totalSize);
+  const ov  = new DataView(out.buffer);
+
+  ov.setUint32(0, sfVersion);
+  ov.setUint16(4, n);
+  ov.setUint16(6, searchRange);
+  ov.setUint16(8, entrySelector);
+  ov.setUint16(10, rangeShift);
+
+  let rec = 12;
+  for (let i = 0; i < n; i++) {
+    const t = tables[i];
+    ov.setUint32(rec,      t.tag);        rec += 4;
+    ov.setUint32(rec,      t.checksum);   rec += 4;
+    ov.setUint32(rec,      offsets[i]);   rec += 4;
+    ov.setUint32(rec,      t.origLength); rec += 4;
+    out.set(t.data, offsets[i]);
+  }
+
   return out;
 }
 
@@ -74,10 +148,10 @@ export async function generateInvoicePdf(data: InvoiceData): Promise<Uint8Array>
   // Register fontkit so pdf-lib can embed custom (non-standard) fonts
   pdfDoc.registerFontkit(fontkit);
 
-  // Embed Inter WOFF fonts — fontkit handles WOFF1 decompression via nodejs_compat zlib
-  const f4 = await pdfDoc.embedFont(dataUriToBytes(INTER_400), { subset: true });
-  const f6 = await pdfDoc.embedFont(dataUriToBytes(INTER_600), { subset: true });
-  const f7 = await pdfDoc.embedFont(dataUriToBytes(INTER_700), { subset: true });
+  // Decode base64 WOFF1 → raw TTF using our pure-JS converter, then embed
+  const f4 = await pdfDoc.embedFont(woff1ToTtf(dataUriToBytes(INTER_400)));
+  const f6 = await pdfDoc.embedFont(woff1ToTtf(dataUriToBytes(INTER_600)));
+  const f7 = await pdfDoc.embedFont(woff1ToTtf(dataUriToBytes(INTER_700)));
 
   // ── Footer (drawn first so body draws on top if overlap ever occurs) ──────
   const footerH = 80;
