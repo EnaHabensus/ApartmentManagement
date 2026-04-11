@@ -168,10 +168,10 @@ export async function generateInvoicePdf(data: InvoiceData): Promise<Uint8Array>
   // Register fontkit so pdf-lib can embed custom (non-standard) fonts
   pdfDoc.registerFontkit(fontkit);
 
-  // Decode WOFF1 → TTF (using DecompressionStream), then embed via fontkit
-  const f4 = await pdfDoc.embedFont(await woff1ToTtf(dataUriToBytes(INTER_400)));
-  const f6 = await pdfDoc.embedFont(await woff1ToTtf(dataUriToBytes(INTER_600)));
-  const f7 = await pdfDoc.embedFont(await woff1ToTtf(dataUriToBytes(INTER_700)));
+  // Decode WOFF1 → TTF (using DecompressionStream), then subset-embed via fontkit
+  const f4 = await pdfDoc.embedFont(await woff1ToTtf(dataUriToBytes(INTER_400)), { subset: true });
+  const f6 = await pdfDoc.embedFont(await woff1ToTtf(dataUriToBytes(INTER_600)), { subset: true });
+  const f7 = await pdfDoc.embedFont(await woff1ToTtf(dataUriToBytes(INTER_700)), { subset: true });
 
   // ── Footer (drawn first so body draws on top if overlap ever occurs) ──────
   const footerH = 80;
