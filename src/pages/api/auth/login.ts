@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { createSupabaseServerClient } from '../../../lib/supabase';
+import { createSupabaseServerClient, createSupabaseAdminClient } from '../../../lib/supabase';
 
 export const POST: APIRoute = async ({ request, cookies, redirect }) => {
   const formData = await request.formData();
@@ -8,6 +8,18 @@ export const POST: APIRoute = async ({ request, cookies, redirect }) => {
 
   if (!email || !password) {
     return redirect('/login?error=invalid_credentials');
+  }
+
+  // Provjeri postoji li korisnik s tim emailom
+  const adminSupabase = createSupabaseAdminClient();
+  const { data: profile } = await adminSupabase
+    .from('profiles')
+    .select('id')
+    .eq('email', email)
+    .single();
+
+  if (!profile) {
+    return redirect('/login?error=user_not_found');
   }
 
   const supabase = createSupabaseServerClient(request, cookies);
