@@ -1,6 +1,6 @@
 import React from 'react';
 import {
-  Document, Page, Text, View, StyleSheet, Font, renderToBuffer,
+  Document, Page, Text, View, StyleSheet, Font, pdf,
 } from '@react-pdf/renderer';
 import { INTER_400, INTER_600, INTER_700 } from './invoice-fonts';
 
@@ -445,6 +445,8 @@ const InvoiceDoc = ({ d }: { d: InvoiceData }) => {
 };
 
 // ── Export ────────────────────────────────────────────────────────────────────
-export async function generateInvoicePdf(data: InvoiceData): Promise<Buffer> {
-  return await renderToBuffer(React.createElement(InvoiceDoc, { d: data }));
+export async function generateInvoicePdf(data: InvoiceData): Promise<Uint8Array> {
+  const blob = await pdf(React.createElement(InvoiceDoc, { d: data })).toBlob();
+  const arrayBuffer = await blob.arrayBuffer();
+  return new Uint8Array(arrayBuffer);
 }
