@@ -9,7 +9,19 @@ export function createResendClient() {
   return new Resend(key);
 }
 
-const FROM_EMAIL = import.meta.env.FROM_EMAIL || 'onboarding@resend.dev';
+function getFromEmail(): string {
+  return getRuntimeEnv()?.FROM_EMAIL ?? import.meta.env.FROM_EMAIL ?? 'noreply@mojiapartmani.com';
+}
+
+async function sendEmail(params: Parameters<Resend['emails']['send']>[0]) {
+  const resend = createResendClient();
+  const { data, error } = await resend.emails.send(params);
+  if (error) {
+    console.error('[Resend error]', JSON.stringify(error));
+    throw new Error(`Resend: ${(error as any).message ?? JSON.stringify(error)}`);
+  }
+  return data;
+}
 
 // ─── Email #1: Dodijeljeno čišćenje ──────────────────────────────────────────
 export async function sendCleaningAssignedEmail({
@@ -27,9 +39,8 @@ export async function sendCleaningAssignedEmail({
   checkOutTime: string;
   checkInDate: string;
 }) {
-  const resend = createResendClient();
-  return resend.emails.send({
-    from: FROM_EMAIL,
+  return sendEmail({
+    from: getFromEmail(),
     to,
     subject: `Dodano čišćenje ${checkOutDate} za ${apartmentName}`,
     html: `
@@ -71,9 +82,8 @@ export async function sendCleaningReminderEmail({
   checkOutDate: string;
   checkOutTime: string;
 }) {
-  const resend = createResendClient();
-  return resend.emails.send({
-    from: FROM_EMAIL,
+  return sendEmail({
+    from: getFromEmail(),
     to,
     subject: `Podsjetnik za čišćenje ${apartmentName} — ${checkOutDate}`,
     html: `
@@ -111,9 +121,8 @@ export async function sendInviteNewUserEmail({
   apartmentName: string;
   inviteUrl: string;
 }) {
-  const resend = createResendClient();
-  return resend.emails.send({
-    from: FROM_EMAIL,
+  return sendEmail({
+    from: getFromEmail(),
     to,
     subject: 'Pozivnica — Moji Apartmani',
     html: `
@@ -148,9 +157,8 @@ export async function sendInviteExistingUserEmail({
   apartmentName: string;
   acceptUrl: string;
 }) {
-  const resend = createResendClient();
-  return resend.emails.send({
-    from: FROM_EMAIL,
+  return sendEmail({
+    from: getFromEmail(),
     to,
     subject: `${inviterName} te poziva na apartman ${apartmentName}`,
     html: `
@@ -189,7 +197,7 @@ export async function sendTaskAssignedEmail({
   const resend = createResendClient();
   const dateTime = dueTime ? `${dueDate} u ${dueTime}` : dueDate;
   return resend.emails.send({
-    from: FROM_EMAIL,
+    from: getFromEmail(),
     to,
     subject: `${apartmentName} — ${taskTitle} ${dateTime}`,
     html: `
@@ -230,7 +238,7 @@ export async function sendTaskCancelledEmail({
   const resend = createResendClient();
   const dateTime = dueTime ? `${dueDate} u ${dueTime}` : dueDate;
   return resend.emails.send({
-    from: FROM_EMAIL,
+    from: getFromEmail(),
     to,
     subject: `${apartmentName} — ${taskTitle} OTKAZANO`,
     html: `
@@ -286,7 +294,7 @@ export async function sendDailyAdminDigestEmail({
   });
 
   return resend.emails.send({
-    from: FROM_EMAIL,
+    from: getFromEmail(),
     to,
     subject: `Moji Apartmani — Dnevni pregled ${dateFmt}`,
     html: `
@@ -343,7 +351,7 @@ export async function sendDailyStaffDigestEmail({
   }).join('');
 
   return resend.emails.send({
-    from: FROM_EMAIL,
+    from: getFromEmail(),
     to,
     subject: `Tvoji zadatci danas — ${dateFmt}`,
     html: `
@@ -370,11 +378,10 @@ export async function sendNewUserRegisteredEmail({
   newUserEmail: string;
   newUserName: string;
 }) {
-  const adminEmail = getRuntimeEnv()?.ADMIN_EMAIL ?? import.meta.env.ADMIN_EMAIL;
+  const adminEmail = getRuntimeEnv()?.ADMIN_EMAIL ?? import.meta.env.ADMIN_EMAIL ?? 'ena.habensus@tesko.me';
   if (!adminEmail) return;
-  const resend = createResendClient();
-  return resend.emails.send({
-    from: FROM_EMAIL,
+  return sendEmail({
+    from: getFromEmail(),
     to: adminEmail,
     subject: `Novi korisnik: ${newUserName} (${newUserEmail})`,
     html: `
@@ -409,9 +416,8 @@ export async function sendTaskCompletedEmail({
   taskTitle: string;
   apartmentName: string;
 }) {
-  const resend = createResendClient();
-  return resend.emails.send({
-    from: FROM_EMAIL,
+  return sendEmail({
+    from: getFromEmail(),
     to,
     subject: `${taskTitle} — ZAVRŠENO`,
     html: `
