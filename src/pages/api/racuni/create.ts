@@ -54,7 +54,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
   const generatedAt = new Date().toISOString();
 
   // Generiraj PDF
-  let pdfBuffer: Buffer;
+  let pdfBuffer: Uint8Array;
   try {
     pdfBuffer = await generateInvoicePdf({
       invoiceNumberDisplay: invoice_number_display.trim(),
