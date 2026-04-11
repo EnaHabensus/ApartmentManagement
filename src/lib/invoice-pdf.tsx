@@ -1,7 +1,6 @@
 // ── Invoice PDF generator — pdf-lib (pure JS, no WASM, works on Cloudflare Workers) ──
 import { PDFDocument, rgb } from 'pdf-lib';
 import fontkit from '@pdf-lib/fontkit';
-import { inflateRawSync } from 'fflate';
 import { INTER_400, INTER_600, INTER_700 } from './invoice-fonts';
 
 // ── Colour palette ────────────────────────────────────────────────────────────
@@ -28,12 +27,33 @@ function dataUriToBytes(uri: string): Uint8Array {
 }
 
 /**
- * Convert WOFF1 to raw TrueType/OpenType binary.
- * fontkit can parse TTF directly without needing Node.js zlib, which may
- * not be fully available in Cloudflare Workers even with nodejs_compat.
- * We decompress the WOFF table data ourselves using fflate (pure JS).
+ * Decompress raw deflate data using the native DecompressionStream Web API.
+ * Available in Cloudflare Workers, modern browsers, and Deno — no npm deps needed.
  */
-function woff1ToTtf(woff: Uint8Array): Uint8Array {
+async function inflateRaw(data: Uint8Array): Promise<Uint8Array> {
+  const ds = new (globalThis as any).DecompressionStream('deflate-raw');
+  const writer = ds.writable.getWriter();
+  const reader = ds.readable.getReader();
+  writer.write(data);
+  writer.close();
+  const chunks: Uint8Array[] = [];
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value as Uint8Array);
+  }
+  const total = chunks.reduce((s, c) => s + c.length, 0);
+  const out = new Uint8Array(total);
+  let pos = 0;
+  for (const c of chunks) { out.set(c, pos); pos += c.length; }
+  return out;
+}
+
+/**
+ * Convert WOFF1 → raw TrueType binary so fontkit can embed it without
+ * needing Node.js zlib (which is unreliable in Cloudflare Workers).
+ */
+async function woff1ToTtf(woff: Uint8Array): Promise<Uint8Array> {
   const v = new DataView(woff.buffer, woff.byteOffset);
   if (v.getUint32(0) !== 0x774F4646) throw new Error('Not a WOFF1 file');
 
@@ -54,10 +74,10 @@ function woff1ToTtf(woff: Uint8Array): Uint8Array {
 
     const raw = woff.subarray(off, off + compLen);
     let data: Uint8Array = compLen < origLen
-      ? inflateRawSync(raw)          // decompress with fflate (pure JS)
-      : new Uint8Array(raw);         // already uncompressed
+      ? await inflateRaw(raw)   // raw deflate → DecompressionStream
+      : new Uint8Array(raw);    // already uncompressed
 
-    // Pad each table to 4-byte boundary (required by TrueType spec)
+    // Pad each table to 4-byte boundary (TrueType spec requirement)
     if (data.length % 4 !== 0) {
       const padded = new Uint8Array((data.length + 3) & ~3);
       padded.set(data);
@@ -67,11 +87,11 @@ function woff1ToTtf(woff: Uint8Array): Uint8Array {
     tables.push({ tag, checksum, origLength: origLen, data });
   }
 
-  // Build TrueType binary
-  const log2n       = Math.floor(Math.log2(n));
-  const searchRange = (1 << log2n) * 16;
+  // Assemble TrueType binary
+  const log2n         = Math.floor(Math.log2(n));
+  const searchRange   = (1 << log2n) * 16;
   const entrySelector = log2n;
-  const rangeShift  = n * 16 - searchRange;
+  const rangeShift    = n * 16 - searchRange;
 
   const dirEnd = 12 + n * 16;
   const offsets: number[] = [];
@@ -90,10 +110,10 @@ function woff1ToTtf(woff: Uint8Array): Uint8Array {
   let rec = 12;
   for (let i = 0; i < n; i++) {
     const t = tables[i];
-    ov.setUint32(rec,      t.tag);        rec += 4;
-    ov.setUint32(rec,      t.checksum);   rec += 4;
-    ov.setUint32(rec,      offsets[i]);   rec += 4;
-    ov.setUint32(rec,      t.origLength); rec += 4;
+    ov.setUint32(rec, t.tag);        rec += 4;
+    ov.setUint32(rec, t.checksum);   rec += 4;
+    ov.setUint32(rec, offsets[i]);   rec += 4;
+    ov.setUint32(rec, t.origLength); rec += 4;
     out.set(t.data, offsets[i]);
   }
 
@@ -148,10 +168,10 @@ export async function generateInvoicePdf(data: InvoiceData): Promise<Uint8Array>
   // Register fontkit so pdf-lib can embed custom (non-standard) fonts
   pdfDoc.registerFontkit(fontkit);
 
-  // Decode base64 WOFF1 → raw TTF using our pure-JS converter, then embed
-  const f4 = await pdfDoc.embedFont(woff1ToTtf(dataUriToBytes(INTER_400)));
-  const f6 = await pdfDoc.embedFont(woff1ToTtf(dataUriToBytes(INTER_600)));
-  const f7 = await pdfDoc.embedFont(woff1ToTtf(dataUriToBytes(INTER_700)));
+  // Decode WOFF1 → TTF (using DecompressionStream), then embed via fontkit
+  const f4 = await pdfDoc.embedFont(await woff1ToTtf(dataUriToBytes(INTER_400)));
+  const f6 = await pdfDoc.embedFont(await woff1ToTtf(dataUriToBytes(INTER_600)));
+  const f7 = await pdfDoc.embedFont(await woff1ToTtf(dataUriToBytes(INTER_700)));
 
   // ── Footer (drawn first so body draws on top if overlap ever occurs) ──────
   const footerH = 80;
