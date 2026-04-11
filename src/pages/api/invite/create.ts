@@ -53,6 +53,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     .from('invite_tokens')
     .insert({
       email,
+      full_name: full_name || email.split('@')[0],
       apartment_ids,
       role,
       invited_by: user.id,

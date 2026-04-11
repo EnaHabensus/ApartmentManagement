@@ -95,7 +95,34 @@ for (const au of (apartmentUsers ?? [])) {
 }
 
 const users = Array.from(usersMap.values());
-console.log('DEBUG users.length:', users.length, JSON.stringify(users));
+
+// Dohvati pending invite tokene (neprihvaćeni, neistekli)
+const { data: pendingInviteRows } = await adminSupabase
+  .from('invite_tokens')
+  .select('id, email, full_name, apartment_ids, role, created_at')
+  .is('accepted_at', null)
+  .gt('expires_at', new Date().toISOString());
+
+// Filtriraj samo invite-ove za admin-ove apartmane
+const existingEmails = new Set(users.map((u) => u.email));
+const pendingInvites = (pendingInviteRows ?? [])
+  .filter((inv) => inv.apartment_ids.some((aptId: string) => adminApartmentIds.includes(aptId)))
+  .filter((inv) => !existingEmails.has(inv.email))
+  .filter((inv) => !filterApartmentId || inv.apartment_ids.includes(filterApartmentId))
+  .map((inv) => ({
+    invite_id: inv.id as string,
+    full_name: (inv.full_name as string) || inv.email.split('@')[0],
+    email: inv.email as string,
+    role: inv.role as string,
+    apartments: (inv.apartment_ids as string[])
+      .filter((aptId) => adminApartmentIds.includes(aptId))
+      .map((aptId) => ({
+        apartment_id: aptId,
+        apartment_name: apartmentsNameMap.get(aptId) ?? '',
+        role: inv.role as string,
+        color: apartmentsColorMap.get(aptId) ?? '#3B82F6',
+      })),
+  }));
 
 const success = Astro.url.searchParams.get('success');
 const error = Astro.url.searchParams.get('error');
@@ -138,7 +165,7 @@ const error = Astro.url.searchParams.get('error');
     </div>
 
     <!-- Tablica korisnika -->
-    {users.length === 0 ? (
+    {users.length === 0 && pendingInvites.length === 0 ? (
       <div class="card p-12 text-center">
         <div class="text-gray-400 mb-4">
           <svg class="mx-auto h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -213,6 +240,41 @@ const error = Astro.url.searchParams.get('error');
                       Obriši
                     </button>
                   </div>
+                </td>
+              </tr>
+            ))}
+            {pendingInvites.map((inv) => (
+              <tr class="table-row bg-orange-50/30">
+                <td class="table-cell px-4 py-3 font-medium text-gray-900 whitespace-nowrap">{inv.full_name}</td>
+                <td class="table-cell px-4 py-3 text-gray-500">{inv.email}</td>
+                <td class="table-cell px-4 py-3">
+                  <span class={`badge ${inv.role === 'admin' ? 'badge-blue' : 'badge-gray'}`}>
+                    {inv.role === 'admin' ? 'Admin' : 'Staff'}
+                  </span>
+                </td>
+                <td class="table-cell px-4 py-3">
+                  <span class="badge bg-orange-100 text-orange-700">Pozivnica poslana</span>
+                </td>
+                <td class="table-cell px-4 py-3">
+                  <div class="flex flex-wrap gap-1">
+                    {inv.apartments.map((apt) => (
+                      <span
+                        class="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium whitespace-nowrap"
+                        style={`background-color: ${apt.color}20; color: ${apt.color}; box-shadow: inset 0 0 0 1px ${apt.color}40`}
+                      >{apt.apartment_name}</span>
+                    ))}
+                  </div>
+                </td>
+                <td class="table-cell px-4 py-3">
+                  <form action="/api/invite/cancel" method="POST">
+                    <input type="hidden" name="token_id" value={inv.invite_id} />
+                    <button
+                      type="submit"
+                      class="btn-ghost text-xs px-2 py-1 text-orange-600 hover:bg-orange-50 hover:text-orange-700"
+                    >
+                      Poništi pozivnicu
+                    </button>
+                  </form>
                 </td>
               </tr>
             ))}
@@ -555,7 +617,7 @@ const error = Astro.url.searchParams.get('error');
   }
   const _p = new URLSearchParams(window.location.search);
   const _s = _p.get('success'), _e = _p.get('error');
-  const _m: Record<string, string> = { updated: 'Korisnik je uspješno ažuriran.', deleted: 'Korisnik je uspješno uklonjen.', invited: 'Pozivnica je uspješno poslana.' };
+  const _m: Record<string, string> = { updated: 'Korisnik je uspješno ažuriran.', deleted: 'Korisnik je uspješno uklonjen.', invited: 'Pozivnica je uspješno poslana.', invite_cancelled: 'Pozivnica je poništena.' };
   if (_s && _m[_s]) showToast(_m[_s], 'success');
   if (_e) showToast(decodeURIComponent(_e), 'error');
   if (_s || _e) { const _url = new URL(window.location.href); _url.searchParams.delete('success'); _url.searchParams.delete('error'); history.replaceState({}, '', _url.toString()); }
