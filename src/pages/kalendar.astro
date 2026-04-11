@@ -14,10 +14,11 @@ const { data: myApartmentUsers } = await adminSupabase
   .select('apartment_id, role')
   .eq('user_id', user.id);
 
-const isAdmin = (myApartmentUsers ?? []).some((au) => au.role === 'admin');
+const hasAnyEntries = (myApartmentUsers ?? []).length > 0;
+const isAdmin = (myApartmentUsers ?? []).some((au) => au.role === 'admin') || !hasAnyEntries;
 const allApartmentIds = (myApartmentUsers ?? []).map((au) => au.apartment_id);
 
-if (allApartmentIds.length === 0) return Astro.redirect('/');
+if (hasAnyEntries && !isAdmin) return Astro.redirect('/zadatci');
 
 const filterApartmentId = Astro.url.searchParams.get('apartment_id') ?? '';
 

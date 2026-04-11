@@ -15,14 +15,14 @@ const adminSupabase = createSupabaseAdminClient();
 // Dohvati apartment_ids gdje je korisnik admin (bez joins — jednostavno i pouzdano)
 const { data: myAdminRows } = await adminSupabase
   .from('apartment_users')
-  .select('apartment_id')
-  .eq('user_id', user.id)
-  .eq('role', 'admin');
+  .select('apartment_id, role')
+  .eq('user_id', user.id);
 
-const adminApartmentIds = (myAdminRows ?? []).map((r) => r.apartment_id);
+const adminApartmentIds = (myAdminRows ?? []).filter((r) => r.role === 'admin').map((r) => r.apartment_id);
+const hasAnyEntries = (myAdminRows ?? []).length > 0;
 
-if (adminApartmentIds.length === 0) {
-  return Astro.redirect('/');
+if (hasAnyEntries && adminApartmentIds.length === 0) {
+  return Astro.redirect('/zadatci');
 }
 
 // Dohvati nazive apartmana zasebno

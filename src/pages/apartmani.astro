@@ -25,14 +25,15 @@ const APT_COLORS = [
 const { data: apartmentUsers } = await supabase
   .from('apartment_users')
   .select('role, apartments(*)')
-  .eq('user_id', user.id)
-  .eq('role', 'admin');
+  .eq('user_id', user.id);
 
-const apartments = apartmentUsers
-  ?.map((au) => au.apartments)
-  .filter((a) => a && !a.is_deleted) ?? [];
+const adminApartmentUsers = (apartmentUsers ?? []).filter((au) => au.role === 'admin');
+const apartments = adminApartmentUsers
+  .map((au) => au.apartments)
+  .filter((a) => a && !a.is_deleted);
 
-const isAdmin = (apartmentUsers?.length ?? 0) > 0;
+const hasAnyEntries = (apartmentUsers ?? []).length > 0;
+const isAdmin = adminApartmentUsers.length > 0 || !hasAnyEntries;
 const success = Astro.url.searchParams.get('success');
 const error = Astro.url.searchParams.get('error');
 ---
