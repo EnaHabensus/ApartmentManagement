@@ -31,7 +31,7 @@ function dataUriToBytes(uri: string): Uint8Array {
  * Available in Cloudflare Workers, modern browsers, and Deno — no npm deps needed.
  */
 async function inflateRaw(data: Uint8Array): Promise<Uint8Array> {
-  const ds = new (globalThis as any).DecompressionStream('deflate-raw');
+  const ds = new (globalThis as any).DecompressionStream('deflate');
   const writer = ds.writable.getWriter();
   const reader = ds.readable.getReader();
   writer.write(data);
