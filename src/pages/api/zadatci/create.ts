@@ -70,6 +70,7 @@ export const POST: APIRoute = async ({ request, cookies, redirect }) => {
 
       const dueDate = due_date.split('-').reverse().join('.');
       for (const profile of profiles ?? []) {
+        console.log('[EMAIL] Šaljem na:', profile.email, 'ime:', profile.full_name);
         sendTaskAssignedEmail({
           to: profile.email,
           assigneeName: profile.full_name,
@@ -77,7 +78,8 @@ export const POST: APIRoute = async ({ request, cookies, redirect }) => {
           taskTitle: title,
           dueDate,
           dueTime: due_time,
-        }).catch(() => {}); // fire-and-forget, ne blokiraj redirect
+        }).then(() => console.log('[EMAIL] OK za:', profile.email))
+          .catch((err) => console.error('[EMAIL] GREŠKA za:', profile.email, err));
       }
     }
   }
