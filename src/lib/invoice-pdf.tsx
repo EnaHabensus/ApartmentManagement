@@ -1,5 +1,6 @@
 // ── Invoice PDF generator — pdf-lib (pure JS, no WASM, works on Cloudflare Workers) ──
 import { PDFDocument, rgb } from 'pdf-lib';
+import fontkit from '@pdf-lib/fontkit';
 import { INTER_400, INTER_600, INTER_700 } from './invoice-fonts';
 
 // ── Colour palette ────────────────────────────────────────────────────────────
@@ -70,7 +71,10 @@ export async function generateInvoicePdf(data: InvoiceData): Promise<Uint8Array>
   const { width, height } = page.getSize();
   const pad = 40;
 
-  // Embed Inter WOFF fonts — pdf-lib uses fontkit internally which handles WOFF1
+  // Register fontkit so pdf-lib can embed custom (non-standard) fonts
+  pdfDoc.registerFontkit(fontkit);
+
+  // Embed Inter WOFF fonts — fontkit handles WOFF1 decompression via nodejs_compat zlib
   const f4 = await pdfDoc.embedFont(dataUriToBytes(INTER_400), { subset: true });
   const f6 = await pdfDoc.embedFont(dataUriToBytes(INTER_600), { subset: true });
   const f7 = await pdfDoc.embedFont(dataUriToBytes(INTER_700), { subset: true });
