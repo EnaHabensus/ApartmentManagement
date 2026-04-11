@@ -40,6 +40,12 @@ export const onRequest = defineMiddleware(async (context, next) => {
       .eq('id', user.id)
       .single();
 
+    // Ako profil ne postoji (obrisan), odjavi korisnika i preusmjeri na login
+    if (!profile) {
+      await supabase.auth.signOut();
+      return redirect('/login');
+    }
+
     context.locals.user = profile;
 
     // Ažuriraj has_logged_in ako je prvi put
