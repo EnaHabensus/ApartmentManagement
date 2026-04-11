@@ -46,7 +46,7 @@ export async function sendCleaningAssignedEmail({
             <td style="padding: 8px; border: 1px solid #ddd;">${checkInDate}</td>
           </tr>
         </table>
-        <p style="color: #666; font-size: 12px;">ApartMan</p>
+        <p style="color: #666; font-size: 12px;">Moji Apartmani</p>
       </div>
     `,
   });
@@ -86,7 +86,7 @@ export async function sendCleaningReminderEmail({
             <td style="padding: 8px; border: 1px solid #ddd;">${checkOutDate} u ${checkOutTime}</td>
           </tr>
         </table>
-        <p style="color: #666; font-size: 12px;">ApartMan</p>
+        <p style="color: #666; font-size: 12px;">Moji Apartmani</p>
       </div>
     `,
   });
@@ -110,10 +110,10 @@ export async function sendInviteNewUserEmail({
   return resend.emails.send({
     from: FROM_EMAIL,
     to,
-    subject: 'Pozivnica — ApartMan',
+    subject: 'Pozivnica — Moji Apartmani',
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <h2>Dobrodošli u ApartMan</h2>
+        <h2>Dobrodošli u Moji Apartmani</h2>
         <p>Pozdrav ${inviteeName},</p>
         <p><strong>${inviterName}</strong> te poziva kao osoblje na apartman <strong>${apartmentName}</strong>.</p>
         <p>Klikni gumb ispod da kreiraš račun i prihvatiš pozivnicu:</p>
@@ -123,7 +123,7 @@ export async function sendInviteNewUserEmail({
             Kreiraj račun
           </a>
         </div>
-        <p style="color: #666; font-size: 12px;">Link vrijedi 7 dana. ApartMan</p>
+        <p style="color: #666; font-size: 12px;">Link vrijedi 7 dana. Moji Apartmani</p>
       </div>
     `,
   });
@@ -159,7 +159,7 @@ export async function sendInviteExistingUserEmail({
             Prihvati pozivnicu
           </a>
         </div>
-        <p style="color: #666; font-size: 12px;">Link vrijedi 7 dana. ApartMan</p>
+        <p style="color: #666; font-size: 12px;">Link vrijedi 7 dana. Moji Apartmani</p>
       </div>
     `,
   });
@@ -190,7 +190,7 @@ export async function sendTaskAssignedEmail({
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #111827;">
         <div style="background: #0F2544; padding: 24px 32px; border-radius: 8px 8px 0 0;">
-          <h1 style="color: white; margin: 0; font-size: 20px;">ApartMan</h1>
+          <h1 style="color: white; margin: 0; font-size: 20px;">Moji Apartmani</h1>
         </div>
         <div style="background: #F9FAFB; padding: 32px; border-radius: 0 0 8px 8px; border: 1px solid #E5E7EB; border-top: none;">
           <p style="font-size: 16px; margin: 0 0 8px;">Hej <strong>${assigneeName}</strong>,</p>
@@ -199,7 +199,7 @@ export async function sendTaskAssignedEmail({
             <p style="margin: 0 0 8px; font-size: 18px; font-weight: bold; color: #0F2544;">${taskTitle}</p>
             <p style="margin: 0; color: #6B7280; font-size: 14px;">📅 ${dateTime}</p>
           </div>
-          <p style="font-size: 12px; color: #9CA3AF; margin: 0;">ApartMan — upravljanje apartmanima</p>
+          <p style="font-size: 12px; color: #9CA3AF; margin: 0;">Moji Apartmani — upravljanje apartmanima</p>
         </div>
       </div>
     `,
@@ -231,7 +231,7 @@ export async function sendTaskCancelledEmail({
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #111827;">
         <div style="background: #0F2544; padding: 24px 32px; border-radius: 8px 8px 0 0;">
-          <h1 style="color: white; margin: 0; font-size: 20px;">ApartMan</h1>
+          <h1 style="color: white; margin: 0; font-size: 20px;">Moji Apartmani</h1>
         </div>
         <div style="background: #F9FAFB; padding: 32px; border-radius: 0 0 8px 8px; border: 1px solid #E5E7EB; border-top: none;">
           <p style="font-size: 16px; margin: 0 0 8px;">Hej <strong>${assigneeName}</strong>,</p>
@@ -240,7 +240,7 @@ export async function sendTaskCancelledEmail({
             <p style="margin: 0 0 8px; font-size: 18px; font-weight: bold; color: #DC2626; text-decoration: line-through;">${taskTitle}</p>
             <p style="margin: 0; color: #6B7280; font-size: 14px;">📅 ${dateTime}</p>
           </div>
-          <p style="font-size: 12px; color: #9CA3AF; margin: 0;">ApartMan — upravljanje apartmanima</p>
+          <p style="font-size: 12px; color: #9CA3AF; margin: 0;">Moji Apartmani — upravljanje apartmanima</p>
         </div>
       </div>
     `,
@@ -283,11 +283,11 @@ export async function sendDailyAdminDigestEmail({
   return resend.emails.send({
     from: FROM_EMAIL,
     to,
-    subject: `ApartMan — Dnevni pregled ${dateFmt}`,
+    subject: `Moji Apartmani — Dnevni pregled ${dateFmt}`,
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #111827;">
         <div style="background: #0F2544; padding: 24px 32px; border-radius: 8px 8px 0 0;">
-          <h1 style="color: white; margin: 0; font-size: 20px;">ApartMan</h1>
+          <h1 style="color: white; margin: 0; font-size: 20px;">Moji Apartmani</h1>
           <p style="color: #93C5FD; margin: 4px 0 0; font-size: 13px;">Dnevni pregled — ${dateFmt}</p>
         </div>
         <div style="background: #F9FAFB; padding: 32px; border-radius: 0 0 8px 8px; border: 1px solid #E5E7EB; border-top: none;">
@@ -304,7 +304,7 @@ export async function sendDailyAdminDigestEmail({
             <h3 style="margin: 0 0 12px; font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px; color: #6B7280;">✅ Zadatci danas (${tasks.length})</h3>
             ${listHtml(taskRows)}
           </div>
-          <p style="font-size: 12px; color: #9CA3AF; margin: 0;">ApartMan — upravljanje apartmanima</p>
+          <p style="font-size: 12px; color: #9CA3AF; margin: 0;">Moji Apartmani — upravljanje apartmanima</p>
         </div>
       </div>
     `,
@@ -344,13 +344,13 @@ export async function sendDailyStaffDigestEmail({
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #111827;">
         <div style="background: #0F2544; padding: 24px 32px; border-radius: 8px 8px 0 0;">
-          <h1 style="color: white; margin: 0; font-size: 20px;">ApartMan</h1>
+          <h1 style="color: white; margin: 0; font-size: 20px;">Moji Apartmani</h1>
           <p style="color: #93C5FD; margin: 4px 0 0; font-size: 13px;">Tvoji zadatci — ${dateFmt}</p>
         </div>
         <div style="background: #F9FAFB; padding: 32px; border-radius: 0 0 8px 8px; border: 1px solid #E5E7EB; border-top: none;">
           <p style="font-size: 15px; margin: 0 0 20px;">Hej <strong>${staffName}</strong>, ovo su tvoji zadatci za danas:</p>
           ${taskRows}
-          <p style="font-size: 12px; color: #9CA3AF; margin: 16px 0 0;">ApartMan — upravljanje apartmanima</p>
+          <p style="font-size: 12px; color: #9CA3AF; margin: 16px 0 0;">Moji Apartmani — upravljanje apartmanima</p>
         </div>
       </div>
     `,
@@ -379,7 +379,7 @@ export async function sendTaskCompletedEmail({
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #111827;">
         <div style="background: #0F2544; padding: 24px 32px; border-radius: 8px 8px 0 0;">
-          <h1 style="color: white; margin: 0; font-size: 20px;">ApartMan</h1>
+          <h1 style="color: white; margin: 0; font-size: 20px;">Moji Apartmani</h1>
         </div>
         <div style="background: #F9FAFB; padding: 32px; border-radius: 0 0 8px 8px; border: 1px solid #E5E7EB; border-top: none;">
           <p style="font-size: 16px; margin: 0 0 8px;">Hej <strong>${adminName}</strong>,</p>
@@ -392,7 +392,7 @@ export async function sendTaskCompletedEmail({
               <p style="margin: 0; font-size: 18px; font-weight: bold; color: #065F46;">${taskTitle}</p>
             </div>
           </div>
-          <p style="font-size: 12px; color: #9CA3AF; margin: 0;">ApartMan — upravljanje apartmanima</p>
+          <p style="font-size: 12px; color: #9CA3AF; margin: 0;">Moji Apartmani — upravljanje apartmanima</p>
         </div>
       </div>
     `,

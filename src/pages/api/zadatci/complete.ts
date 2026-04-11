@@ -93,7 +93,6 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     adminSupabase.from('apartment_users').select('user_id').eq('apartment_id', task.apartment_id).eq('role', 'admin'),
   ]);
 
-  console.log('[COMPLETE] apt:', apt?.name, 'completer:', completerProfile?.full_name, 'adminRows:', adminRows?.length);
   if (apt && completerProfile && adminRows && adminRows.length > 0) {
     const adminIds = adminRows.map((r) => r.user_id);
     const { data: adminProfiles } = await adminSupabase
@@ -101,7 +100,6 @@ export const POST: APIRoute = async ({ request, cookies }) => {
       .select('id, full_name, email')
       .in('id', adminIds);
 
-    console.log('[COMPLETE] adminProfiles:', adminProfiles?.map(p => p.email));
     for (const adminProfile of adminProfiles ?? []) {
       sendTaskCompletedEmail({
         to: adminProfile.email,
@@ -109,8 +107,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
         completedByName: completerProfile.full_name,
         taskTitle: task.title,
         apartmentName: apt.name,
-      }).then(() => console.log('[COMPLETE EMAIL] OK za:', adminProfile.email))
-        .catch((err) => console.error('[COMPLETE EMAIL] GREŠKA:', err));
+      }).catch(() => {});
     }
   }
 
