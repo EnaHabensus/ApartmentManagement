@@ -357,7 +357,40 @@ export async function sendDailyStaffDigestEmail({
   });
 }
 
-// ─── Email #9: Zadatak završen — obavijest adminu ─────────────────────────────
+// ─── Email #9: Novi korisnik registriran — obavijest adminu ──────────────────
+export async function sendNewUserRegisteredEmail({
+  newUserEmail,
+  newUserName,
+}: {
+  newUserEmail: string;
+  newUserName: string;
+}) {
+  const adminEmail = import.meta.env.ADMIN_EMAIL;
+  if (!adminEmail) return;
+  const resend = createResendClient();
+  return resend.emails.send({
+    from: FROM_EMAIL,
+    to: adminEmail,
+    subject: `Novi korisnik: ${newUserName} (${newUserEmail})`,
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #111827;">
+        <div style="background: #0F2544; padding: 24px 32px; border-radius: 8px 8px 0 0;">
+          <h1 style="color: white; margin: 0; font-size: 20px;">Moji Apartmani</h1>
+        </div>
+        <div style="background: #F9FAFB; padding: 32px; border-radius: 0 0 8px 8px; border: 1px solid #E5E7EB; border-top: none;">
+          <p style="font-size: 16px; margin: 0 0 16px;">Novi korisnik se registrirao na Moji Apartmani:</p>
+          <div style="background: white; border: 1px solid #E5E7EB; border-radius: 8px; padding: 20px; margin-bottom: 24px;">
+            <p style="margin: 0 0 8px; font-size: 16px; font-weight: bold; color: #0F2544;">${newUserName}</p>
+            <p style="margin: 0; color: #6B7280; font-size: 14px;">${newUserEmail}</p>
+          </div>
+          <p style="font-size: 12px; color: #9CA3AF; margin: 0;">Moji Apartmani — upravljanje apartmanima</p>
+        </div>
+      </div>
+    `,
+  });
+}
+
+// ─── Email #10: Zadatak završen — obavijest adminu ────────────────────────────
 export async function sendTaskCompletedEmail({
   to,
   adminName,

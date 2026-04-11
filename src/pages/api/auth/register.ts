@@ -1,5 +1,6 @@
 import type { APIRoute } from 'astro';
 import { createSupabaseServerClient } from '../../../lib/supabase';
+import { sendNewUserRegisteredEmail } from '../../../lib/resend';
 
 export const POST: APIRoute = async ({ request, cookies, redirect }) => {
   const formData = await request.formData();
@@ -36,6 +37,8 @@ export const POST: APIRoute = async ({ request, cookies, redirect }) => {
     }
     return redirect('/register?error=server_error');
   }
+
+  sendNewUserRegisteredEmail({ newUserEmail: email, newUserName: full_name }).catch(() => {});
 
   return redirect('/');
 };
