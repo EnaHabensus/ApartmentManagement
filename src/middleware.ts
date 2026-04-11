@@ -5,6 +5,13 @@ import { createSupabaseServerClient } from './lib/supabase';
 const PUBLIC_ROUTES = ['/login', '/register', '/invite'];
 
 export const onRequest = defineMiddleware(async (context, next) => {
+  // Postavi Cloudflare runtime env globalno PRIJE svih early returna
+  // kako bi library kod (supabase.ts, resend.ts) mogao čitati secretse
+  const runtimeEnv = (context.locals as any).runtime?.env;
+  if (runtimeEnv) {
+    (globalThis as any).__cloudflareEnv = runtimeEnv;
+  }
+
   const { request, cookies, redirect, url } = context;
   const pathname = url.pathname;
 

@@ -5,12 +5,12 @@ import {
   sendDailyStaffDigestEmail,
 } from '../../../lib/resend';
 import type { APIRoute } from 'astro';
-import { CRON_SECRET } from 'astro:env/server';
 
 export const GET: APIRoute = async ({ request }) => {
   // Opcionalna provjera secret headera za zaštitu endpointa
   const secret = request.headers.get('x-cron-secret');
-  if (CRON_SECRET && secret !== CRON_SECRET) {
+  const cronSecret = (globalThis as any).__cloudflareEnv?.CRON_SECRET ?? import.meta.env.CRON_SECRET;
+  if (cronSecret && secret !== cronSecret) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
   }
 

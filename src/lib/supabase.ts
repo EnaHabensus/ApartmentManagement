@@ -1,7 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { createServerClient, parseCookieHeader, serializeCookieHeader } from '@supabase/ssr';
 import type { AstroCookies } from 'astro';
-import { SUPABASE_SERVICE_ROLE_KEY } from 'astro:env/server';
 
 const supabaseUrl = import.meta.env.PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY;
@@ -27,7 +26,9 @@ export function createSupabaseServerClient(
 
 // Admin klijent za server-side operacije (service role — bez RLS)
 export function createSupabaseAdminClient() {
-  return createClient(supabaseUrl, SUPABASE_SERVICE_ROLE_KEY, {
+  const key = (globalThis as any).__cloudflareEnv?.SUPABASE_SERVICE_ROLE_KEY
+    ?? import.meta.env.SUPABASE_SERVICE_ROLE_KEY;
+  return createClient(supabaseUrl, key, {
     auth: {
       autoRefreshToken: false,
       persistSession: false,

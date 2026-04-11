@@ -1,8 +1,12 @@
 import { Resend } from 'resend';
-import { RESEND_API_KEY, ADMIN_EMAIL } from 'astro:env/server';
+
+function getRuntimeEnv() {
+  return (globalThis as any).__cloudflareEnv;
+}
 
 export function createResendClient() {
-  return new Resend(RESEND_API_KEY);
+  const key = getRuntimeEnv()?.RESEND_API_KEY ?? import.meta.env.RESEND_API_KEY;
+  return new Resend(key);
 }
 
 const FROM_EMAIL = import.meta.env.FROM_EMAIL || 'onboarding@resend.dev';
@@ -366,11 +370,12 @@ export async function sendNewUserRegisteredEmail({
   newUserEmail: string;
   newUserName: string;
 }) {
-  if (!ADMIN_EMAIL) return;
+  const adminEmail = getRuntimeEnv()?.ADMIN_EMAIL ?? import.meta.env.ADMIN_EMAIL;
+  if (!adminEmail) return;
   const resend = createResendClient();
   return resend.emails.send({
     from: FROM_EMAIL,
-    to: ADMIN_EMAIL,
+    to: adminEmail,
     subject: `Novi korisnik: ${newUserName} (${newUserEmail})`,
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #111827;">
