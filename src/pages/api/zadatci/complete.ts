@@ -1,5 +1,6 @@
 import type { APIRoute } from 'astro';
 import { createSupabaseServerClient, createSupabaseAdminClient } from '../../../lib/supabase';
+import { sendTaskCompletedEmail } from '../../../lib/resend';
 
 export const POST: APIRoute = async ({ request, cookies }) => {
   const supabase = createSupabaseServerClient(request, cookies);
@@ -32,10 +33,10 @@ export const POST: APIRoute = async ({ request, cookies }) => {
 
   const adminSupabase = createSupabaseAdminClient();
 
-  // Provjeri da korisnik ima pristup zadatku (admin ili assignee)
+  // Dohvati zadatak (title + apartment_id)
   const { data: task } = await adminSupabase
     .from('tasks')
-    .select('apartment_id, is_completed')
+    .select('apartment_id, is_completed, title')
     .eq('id', id)
     .single();
 
@@ -83,6 +84,31 @@ export const POST: APIRoute = async ({ request, cookies }) => {
       status: 500,
       headers: { 'Content-Type': 'application/json' },
     });
+  }
+
+  // Pošalji email adminima apartmana (fire-and-forget)
+  const [{ data: apt }, { data: completerProfile }, { data: adminRows }] = await Promise.all([
+    adminSupabase.from('apartments').select('name').eq('id', task.apartment_id).single(),
+    adminSupabase.from('profiles').select('full_name').eq('id', user.id).single(),
+    adminSupabase.from('apartment_users').select('user_id').eq('apartment_id', task.apartment_id).eq('role', 'admin'),
+  ]);
+
+  if (apt && completerProfile && adminRows && adminRows.length > 0) {
+    const adminIds = adminRows.map((r) => r.user_id);
+    const { data: adminProfiles } = await adminSupabase
+      .from('profiles')
+      .select('id, full_name, email')
+      .in('id', adminIds);
+
+    for (const adminProfile of adminProfiles ?? []) {
+      sendTaskCompletedEmail({
+        to: adminProfile.email,
+        adminName: adminProfile.full_name,
+        completedByName: completerProfile.full_name,
+        taskTitle: task.title,
+        apartmentName: apt.name,
+      }).catch(() => {});
+    }
   }
 
   return new Response(JSON.stringify({ success: true }), {
