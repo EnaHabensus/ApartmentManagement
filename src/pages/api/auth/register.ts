@@ -38,7 +38,9 @@ export const POST: APIRoute = async ({ request, cookies, redirect }) => {
     return redirect('/register?error=server_error');
   }
 
-  sendNewUserRegisteredEmail({ newUserEmail: email, newUserName: full_name }).catch(() => {});
+  await sendNewUserRegisteredEmail({ newUserEmail: email, newUserName: full_name }).catch((err) => {
+    console.error('[register] email error:', err);
+  });
 
   return redirect('/');
 };
