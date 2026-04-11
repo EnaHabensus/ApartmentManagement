@@ -1,5 +1,9 @@
 import { createSupabaseAdminClient } from '../../../lib/supabase';
-import { sendCleaningReminderEmail } from '../../../lib/resend';
+import {
+  sendCleaningReminderEmail,
+  sendDailyAdminDigestEmail,
+  sendDailyStaffDigestEmail,
+} from '../../../lib/resend';
 import type { APIRoute } from 'astro';
 
 export const GET: APIRoute = async ({ request }) => {
@@ -163,6 +167,155 @@ export const GET: APIRoute = async ({ request }) => {
     results.job2_auto_invoices = { generated: invoicesGenerated };
   } catch (err) {
     results.job2_auto_invoices = { error: String(err) };
+  }
+
+  // ─── Zajednički podaci za Job 3 i Job 4 ──────────────────────────────────────
+  const TZ = 'Europe/Zagreb';
+  const todayStr = new Date().toLocaleDateString('sv-SE', { timeZone: TZ });
+
+  // ─── Job 3: Dnevni digest za admine ──────────────────────────────────────────
+  try {
+    // Dohvati sve apartmane i njihove admineee
+    const { data: allAdminRows } = await supabase
+      .from('apartment_users')
+      .select('apartment_id, user_id')
+      .eq('role', 'admin');
+
+    const adminIds = [...new Set((allAdminRows ?? []).map((r) => r.user_id))];
+    const apartmentIds = [...new Set((allAdminRows ?? []).map((r) => r.apartment_id))];
+
+    // Dohvati podatke u paraleli
+    const [{ data: aptData }, { data: adminProfiles }, { data: checkoutRez }, { data: checkinRez }, { data: todayTasks }] =
+      await Promise.all([
+        supabase.from('apartments').select('id, name').in('id', apartmentIds),
+        supabase.from('profiles').select('id, full_name, email').in('id', adminIds),
+        supabase.from('reservations').select('guest_name, apartment_id').in('apartment_id', apartmentIds).eq('check_out', todayStr).eq('status', 'active'),
+        supabase.from('reservations').select('guest_name, apartment_id').in('apartment_id', apartmentIds).eq('check_in', todayStr).eq('status', 'active'),
+        supabase.from('tasks').select('id, title, due_date, due_time, apartment_id').in('apartment_id', apartmentIds).eq('due_date', todayStr).eq('is_completed', false),
+      ]);
+
+    const aptNameMap = new Map((aptData ?? []).map((a) => [a.id, a.name]));
+
+    // Dohvati assigneeje za zadatke
+    const taskIds = (todayTasks ?? []).map((t) => t.id);
+    const { data: taskAssigneeRows } = taskIds.length > 0
+      ? await supabase.from('task_assignees').select('task_id, user_id').in('task_id', taskIds)
+      : { data: [] };
+    const allAssigneeIds = [...new Set((taskAssigneeRows ?? []).map((r) => r.user_id))];
+    const { data: assigneeProfiles } = allAssigneeIds.length > 0
+      ? await supabase.from('profiles').select('id, full_name').in('id', allAssigneeIds)
+      : { data: [] };
+    const assigneeNameMap = new Map((assigneeProfiles ?? []).map((p) => [p.id, p.full_name]));
+    const taskAssigneeMap = new Map<string, string | null>();
+    for (const row of taskAssigneeRows ?? []) {
+      if (!taskAssigneeMap.has(row.task_id)) {
+        taskAssigneeMap.set(row.task_id, assigneeNameMap.get(row.user_id) ?? null);
+      }
+    }
+
+    // Pošalji jedan email po adminu s podacima za NJEGOVE apartmane
+    let digestsSent = 0;
+    for (const adminRow of (allAdminRows ?? [])) {
+      // Grupiraj po adminu — dohvati sve apartmane za ovog admina
+      const adminAptIds = (allAdminRows ?? [])
+        .filter((r) => r.user_id === adminRow.user_id)
+        .map((r) => r.apartment_id);
+
+      // Izbjegni duplikate ako smo već poslali ovom adminu
+      if (digestsSent > 0 && adminRow.user_id === (allAdminRows ?? [])[digestsSent - 1]?.user_id) continue;
+
+      const profile = (adminProfiles ?? []).find((p) => p.id === adminRow.user_id);
+      if (!profile) continue;
+
+      const checkouts = (checkoutRez ?? [])
+        .filter((r) => adminAptIds.includes(r.apartment_id))
+        .map((r) => ({ guestName: r.guest_name, apartmentName: aptNameMap.get(r.apartment_id) ?? '' }));
+      const checkins = (checkinRez ?? [])
+        .filter((r) => adminAptIds.includes(r.apartment_id))
+        .map((r) => ({ guestName: r.guest_name, apartmentName: aptNameMap.get(r.apartment_id) ?? '' }));
+      const tasks = (todayTasks ?? [])
+        .filter((t) => adminAptIds.includes(t.apartment_id))
+        .map((t) => ({
+          title: t.title,
+          apartmentName: aptNameMap.get(t.apartment_id) ?? '',
+          dueTime: t.due_time,
+          assigneeName: taskAssigneeMap.get(t.id) ?? null,
+        }));
+
+      await sendDailyAdminDigestEmail({
+        to: profile.email,
+        adminName: profile.full_name,
+        todayStr,
+        checkouts,
+        checkins,
+        tasks,
+      });
+      digestsSent++;
+    }
+
+    results.job3_admin_digest = { sent: digestsSent };
+  } catch (err) {
+    results.job3_admin_digest = { error: String(err) };
+  }
+
+  // ─── Job 4: Dnevni digest zadataka za staff ───────────────────────────────────
+  try {
+    // Dohvati sve apartmane
+    const { data: allAptRows } = await supabase.from('apartments').select('id, name');
+    const allAptNameMap = new Map((allAptRows ?? []).map((a) => [a.id, a.name]));
+
+    // Dohvati zadatke za danas koji su assignani
+    const { data: staffTasks } = await supabase
+      .from('tasks')
+      .select('id, title, due_date, due_time, apartment_id')
+      .eq('due_date', todayStr)
+      .eq('is_completed', false);
+
+    const staffTaskIds = (staffTasks ?? []).map((t) => t.id);
+    const { data: staffAssigneeRows } = staffTaskIds.length > 0
+      ? await supabase.from('task_assignees').select('task_id, user_id').in('task_id', staffTaskIds)
+      : { data: [] };
+
+    // Grupiraj po user_id
+    const tasksByUser = new Map<string, string[]>();
+    for (const row of staffAssigneeRows ?? []) {
+      if (!tasksByUser.has(row.user_id)) tasksByUser.set(row.user_id, []);
+      tasksByUser.get(row.user_id)!.push(row.task_id);
+    }
+
+    const staffUserIds = [...tasksByUser.keys()];
+    const { data: staffProfiles } = staffUserIds.length > 0
+      ? await supabase.from('profiles').select('id, full_name, email').in('id', staffUserIds)
+      : { data: [] };
+
+    const taskMap = new Map((staffTasks ?? []).map((t) => [t.id, t]));
+
+    let staffDigestsSent = 0;
+    for (const profile of staffProfiles ?? []) {
+      const myTaskIds = tasksByUser.get(profile.id) ?? [];
+      const myTasks = myTaskIds
+        .map((tid) => taskMap.get(tid))
+        .filter(Boolean)
+        .map((t) => ({
+          title: t!.title,
+          apartmentName: allAptNameMap.get(t!.apartment_id) ?? '',
+          dueTime: t!.due_time,
+        }));
+
+      if (myTasks.length === 0) continue;
+
+      await sendDailyStaffDigestEmail({
+        to: profile.email,
+        staffName: profile.full_name,
+        todayStr,
+        tasks: myTasks,
+      });
+      staffDigestsSent++;
+    }
+
+    results.job4_staff_digest = { sent: staffDigestsSent };
+  } catch (err) {
+    results.job4_staff_digest = { error: String(err) };
   }
 
   return new Response(JSON.stringify({ ok: true, results }), {

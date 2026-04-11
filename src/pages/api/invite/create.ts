@@ -14,7 +14,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
   }
 
   const body = await request.json();
-  const { email, apartment_ids, role = 'staff' } = body;
+  const { email, apartment_ids, role = 'staff', full_name } = body;
 
   if (!email || !apartment_ids?.length) {
     return new Response(JSON.stringify({ error: 'Email i apartmani su obavezni.' }), { status: 400 });
@@ -86,7 +86,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     // Scenarij A: novi korisnik
     await sendInviteNewUserEmail({
       to: email,
-      inviteeName: email.split('@')[0],
+      inviteeName: full_name || email.split('@')[0],
       inviterName: inviterProfile?.full_name ?? 'Admin',
       apartmentName,
       inviteUrl: `${baseUrl}/invite?token=${inviteToken.id}`,

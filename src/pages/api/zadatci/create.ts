@@ -1,5 +1,6 @@
 import type { APIRoute } from 'astro';
 import { createSupabaseServerClient, createSupabaseAdminClient } from '../../../lib/supabase';
+import { sendTaskAssignedEmail } from '../../../lib/resend';
 
 export const POST: APIRoute = async ({ request, cookies, redirect }) => {
   const supabase = createSupabaseServerClient(request, cookies);
@@ -51,21 +52,33 @@ export const POST: APIRoute = async ({ request, cookies, redirect }) => {
     return redirect('/zadatci?error=' + encodeURIComponent('Greška pri kreiranju zadatka: ' + (error?.message ?? 'nepoznata greška')));
   }
 
-  // Dodaj assignee-je
+  // Dodaj assignee-je i pošalji notifikacije
   if (assignee_ids_raw) {
     let assignee_ids: string[] = [];
-    try {
-      assignee_ids = JSON.parse(assignee_ids_raw);
-    } catch {
-      assignee_ids = [];
-    }
+    try { assignee_ids = JSON.parse(assignee_ids_raw); } catch { assignee_ids = []; }
+
     if (assignee_ids.length > 0) {
       await adminSupabase.from('task_assignees').insert(
-        assignee_ids.map((uid) => ({
-          task_id: task.id,
-          user_id: uid,
-        }))
+        assignee_ids.map((uid) => ({ task_id: task.id, user_id: uid }))
       );
+
+      // Dohvati apartman naziv i profile assigneeja za email
+      const [{ data: apt }, { data: profiles }] = await Promise.all([
+        adminSupabase.from('apartments').select('name').eq('id', apartment_id).single(),
+        adminSupabase.from('profiles').select('id, full_name, email').in('id', assignee_ids),
+      ]);
+
+      const dueDate = due_date.split('-').reverse().join('.');
+      for (const profile of profiles ?? []) {
+        sendTaskAssignedEmail({
+          to: profile.email,
+          assigneeName: profile.full_name,
+          apartmentName: apt?.name ?? '',
+          taskTitle: title,
+          dueDate,
+          dueTime: due_time,
+        }).catch(() => {}); // fire-and-forget, ne blokiraj redirect
+      }
     }
   }
 
