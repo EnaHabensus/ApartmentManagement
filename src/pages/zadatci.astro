@@ -16,7 +16,7 @@ const { data: myApartmentUsers } = await adminSupabase
   .select('apartment_id, role')
   .eq('user_id', user.id);
 
-const isAdmin = (myApartmentUsers ?? []).some((au) => au.role === 'admin') || (myApartmentUsers ?? []).length === 0;
+const isAdmin = (myApartmentUsers ?? []).some((au) => au.role === 'admin');
 const adminApartmentIds = (myApartmentUsers ?? []).filter((au) => au.role === 'admin').map((au) => au.apartment_id);
 const allApartmentIds = (myApartmentUsers ?? []).map((au) => au.apartment_id);
 
@@ -167,7 +167,7 @@ function getInitials(name: string): string {
 }
 ---
 
-<AppLayout title="Zadatci" user={profile} isAdmin={isAdmin} activeRoute="/zadatci">
+<AppLayout title="Zadatci" user={profile} isAdmin={true} activeRoute="/zadatci">
   <div class="p-6 max-w-7xl mx-auto">
 
     <!-- Header -->

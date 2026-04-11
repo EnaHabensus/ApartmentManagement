@@ -20,19 +20,6 @@ const apartments = adminApts
   ?.filter((au) => au.apartments && !au.apartments.is_deleted)
   .map((au) => au.apartments) ?? [];
 
-// Ako nema admin ulogu → preusmjeri na zadatci (staff)
-if (apartments.length === 0) {
-  const { data: staffCheck } = await supabase
-    .from('apartment_users')
-    .select('id')
-    .eq('user_id', user.id)
-    .eq('role', 'staff')
-    .limit(1);
-
-  if (staffCheck && staffCheck.length > 0) {
-    return Astro.redirect('/zadatci');
-  }
-}
 
 const period = Astro.url.searchParams.get('period') || 'all';
 const aptFilter = Astro.url.searchParams.get('apartment') || 'all';

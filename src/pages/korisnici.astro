@@ -19,11 +19,6 @@ const { data: myAdminRows } = await adminSupabase
   .eq('user_id', user.id);
 
 const adminApartmentIds = (myAdminRows ?? []).filter((r) => r.role === 'admin').map((r) => r.apartment_id);
-const hasAnyEntries = (myAdminRows ?? []).length > 0;
-
-if (hasAnyEntries && adminApartmentIds.length === 0) {
-  return Astro.redirect('/zadatci');
-}
 
 // Dohvati nazive apartmana zasebno
 const { data: adminApartmentData } = await adminSupabase

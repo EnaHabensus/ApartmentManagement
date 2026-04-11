@@ -15,11 +15,7 @@ const { data: myApartmentUsers } = await adminSupabase
   .select('apartment_id, role')
   .eq('user_id', user.id);
 
-const hasAnyEntries = (myApartmentUsers ?? []).length > 0;
-const isAdmin = (myApartmentUsers ?? []).some((au) => au.role === 'admin') || !hasAnyEntries;
 const adminApartmentIds = (myApartmentUsers ?? []).filter((au) => au.role === 'admin').map((au) => au.apartment_id);
-
-if (hasAnyEntries && !isAdmin) return Astro.redirect('/zadatci');
 
 const { data: apartmentsData } = await adminSupabase
   .from('apartments')

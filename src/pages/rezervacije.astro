@@ -17,18 +17,15 @@ const { data: myApartmentUsers } = await adminSupabase
   .select('apartment_id, role')
   .eq('user_id', user.id);
 
-const hasAnyEntries = (myApartmentUsers ?? []).length > 0;
-const isAdmin = (myApartmentUsers ?? []).some((au) => au.role === 'admin') || !hasAnyEntries;
+const isAdmin = (myApartmentUsers ?? []).some((au) => au.role === 'admin');
 const adminApartmentIds = (myApartmentUsers ?? []).filter((au) => au.role === 'admin').map((au) => au.apartment_id);
 const allApartmentIds = (myApartmentUsers ?? []).map((au) => au.apartment_id);
-
-if (hasAnyEntries && !isAdmin) return Astro.redirect('/zadatci');
 
 // Dohvati apartmane (uključi check_out_time za kreiranje zadatka čišćenja)
 const { data: apartmentsData } = await adminSupabase
   .from('apartments')
   .select('id, name, check_out_time, color')
-  .in('id', allApartmentIds)
+  .in('id', adminApartmentIds.length > 0 ? adminApartmentIds : ['none'])
   .eq('is_deleted', false);
 
 const allApartments = apartmentsData ?? [];
@@ -44,7 +41,7 @@ const error = Astro.url.searchParams.get('error');
 // Dohvati rezervacije
 const aptIds = filterApartmentId
   ? [filterApartmentId]
-  : (isAdmin ? adminApartmentIds : allApartmentIds);
+  : adminApartmentIds;
 
 let reservationsQuery = adminSupabase
   .from('reservations')
@@ -153,7 +150,7 @@ const tabs = [
 ];
 ---
 
-<AppLayout title="Rezervacije" user={profile} isAdmin={isAdmin} activeRoute="/rezervacije">
+<AppLayout title="Rezervacije" user={profile} isAdmin={true} activeRoute="/rezervacije">
   <div class="p-6 max-w-7xl mx-auto">
 
     <!-- Header -->
