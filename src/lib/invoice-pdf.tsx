@@ -1,268 +1,37 @@
-import React from 'react';
-import {
-  Document, Page, Text, View, StyleSheet, Font, pdf,
-} from '@react-pdf/renderer';
+// ── Invoice PDF generator — pdf-lib (pure JS, no WASM, works on Cloudflare Workers) ──
+import { PDFDocument, rgb } from 'pdf-lib';
 import { INTER_400, INTER_600, INTER_700 } from './invoice-fonts';
 
-// ── Fonts (Inter latin-ext, embedded as base64 — no network needed) ───────────
-Font.register({
-  family: 'Inter',
-  fonts: [
-    { src: INTER_400, fontWeight: 400 },
-    { src: INTER_600, fontWeight: 600 },
-    { src: INTER_700, fontWeight: 700 },
-  ],
-});
-
-// Disable automatic hyphenation
-Font.registerHyphenationCallback((word) => [word]);
-
-// ── Palette ───────────────────────────────────────────────────────────────────
+// ── Colour palette ────────────────────────────────────────────────────────────
 const C = {
-  navy:    '#0F2544',
-  navyMid: '#1D3A6B',
-  blue:    '#2563EB',
-  slate:   '#64748B',
-  slateL:  '#94A3B8',
-  border:  '#E2E8F0',
-  bg:      '#F8FAFC',
-  white:   '#FFFFFF',
-  text:    '#0F172A',
-  textMid: '#334155',
+  navy:   rgb( 15/255,  37/255,  68/255),   // #0F2544
+  blue:   rgb( 37/255,  99/255, 235/255),   // #2563EB
+  blueL:  rgb(147/255, 197/255, 253/255),   // #93C5FD
+  slate:  rgb(100/255, 116/255, 139/255),   // #64748B
+  slateL: rgb(148/255, 163/255, 184/255),   // #94A3B8
+  border: rgb(226/255, 232/255, 240/255),   // #E2E8F0
+  bg:     rgb(248/255, 250/255, 252/255),   // #F8FAFC
+  white:  rgb(1, 1, 1),
+  text:   rgb( 15/255,  23/255,  42/255),   // #0F172A
+  mid:    rgb( 51/255,  65/255,  85/255),   // #334155
 };
 
-// ── Styles ────────────────────────────────────────────────────────────────────
-const s = StyleSheet.create({
-  page: {
-    fontFamily: 'Inter',
-    fontWeight: 400,
-    fontSize: 9,
-    color: C.text,
-    backgroundColor: C.white,
-    paddingTop: 0,
-    paddingBottom: 56,
-    paddingHorizontal: 0,
-  },
-
-  // ─ Header band ─────────────────────────────────────────────────────────────
-  headerBand: {
-    backgroundColor: C.navy,
-    paddingHorizontal: 40,
-    paddingVertical: 24,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-end',
-  },
-  headerAptName: {
-    fontWeight: 700,
-    fontSize: 14,
-    color: C.white,
-    letterSpacing: 0.5,
-  },
-  headerAptSub: {
-    fontSize: 8,
-    color: '#93C5FD',
-    marginTop: 2,
-  },
-  headerRight: {
-    alignItems: 'flex-end',
-  },
-  headerTitle: {
-    fontSize: 10,
-    fontWeight: 600,
-    color: '#93C5FD',
-    letterSpacing: 1,
-    textTransform: 'uppercase',
-  },
-  headerNumber: {
-    fontSize: 22,
-    fontWeight: 700,
-    color: C.white,
-    marginTop: 2,
-  },
-
-  // ─ Body ────────────────────────────────────────────────────────────────────
-  body: {
-    paddingHorizontal: 40,
-    paddingTop: 28,
-  },
-
-  // ─ Two-column info section ──────────────────────────────────────────────────
-  infoRow: {
-    flexDirection: 'row',
-    gap: 20,
-    marginBottom: 28,
-  },
-  infoBlock: {
-    flex: 1,
-  },
-  infoBlockRight: {
-    flex: 1,
-    alignItems: 'flex-end',
-  },
-  infoLabel: {
-    fontSize: 7,
-    fontWeight: 600,
-    color: C.slateL,
-    letterSpacing: 0.8,
-    textTransform: 'uppercase',
-    marginBottom: 6,
-  },
-  infoName: {
-    fontSize: 11,
-    fontWeight: 700,
-    color: C.text,
-    marginBottom: 4,
-  },
-  infoLine: {
-    fontSize: 9,
-    color: C.textMid,
-    marginBottom: 2,
-  },
-  infoLabelInline: {
-    fontWeight: 600,
-    color: C.textMid,
-  },
-
-  divider: {
-    borderBottomWidth: 1,
-    borderBottomColor: C.border,
-    marginBottom: 24,
-  },
-
-  // ─ Table ───────────────────────────────────────────────────────────────────
-  tableHead: {
-    flexDirection: 'row',
-    backgroundColor: C.navy,
-    borderRadius: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    marginBottom: 0,
-  },
-  tableHeadCell: {
-    fontSize: 8,
-    fontWeight: 700,
-    color: C.white,
-  },
-  tableHeadCellSub: {
-    fontSize: 7,
-    fontWeight: 400,
-    color: '#93C5FD',
-  },
-  tableRow: {
-    flexDirection: 'row',
-    paddingHorizontal: 10,
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: C.border,
-    alignItems: 'center',
-  },
-  tableCell: {
-    fontSize: 9.5,
-    color: C.textMid,
-  },
-  tableCellBold: {
-    fontSize: 9.5,
-    fontWeight: 700,
-    color: C.text,
-  },
-
-  // Column widths
-  cService:  { flex: 3 },
-  cUnit:     { flex: 2 },
-  cQty:      { flex: 1, alignItems: 'center' },
-  cPrice:    { flex: 2, alignItems: 'flex-end' },
-  cTotal:    { flex: 2, alignItems: 'flex-end' },
-
-  // ─ Summary ─────────────────────────────────────────────────────────────────
-  summaryWrap: {
-    marginTop: 12,
-    alignItems: 'flex-end',
-    marginBottom: 28,
-  },
-  summaryRow: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    marginBottom: 4,
-    gap: 48,
-  },
-  summaryLabel: {
-    fontSize: 9,
-    color: C.slate,
-    textAlign: 'right',
-  },
-  summaryValue: {
-    fontSize: 9,
-    color: C.textMid,
-    textAlign: 'right',
-    minWidth: 80,
-  },
-  summaryDivider: {
-    borderBottomWidth: 1,
-    borderBottomColor: C.border,
-    marginBottom: 8,
-    marginTop: 4,
-    width: 260,
-    alignSelf: 'flex-end',
-  },
-  totalRow: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    gap: 48,
-    backgroundColor: C.bg,
-    borderRadius: 4,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    marginTop: 2,
-  },
-  totalLabel: {
-    fontSize: 11,
-    fontWeight: 700,
-    color: C.navy,
-    textAlign: 'right',
-  },
-  totalValue: {
-    fontSize: 11,
-    fontWeight: 700,
-    color: C.blue,
-    textAlign: 'right',
-    minWidth: 80,
-  },
-
-  // ─ Footer ──────────────────────────────────────────────────────────────────
-  footer: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    paddingHorizontal: 40,
-    paddingTop: 14,
-    paddingBottom: 18,
-    borderTopWidth: 1,
-    borderTopColor: C.border,
-    backgroundColor: C.bg,
-  },
-  footerDate: {
-    fontSize: 9,
-    fontWeight: 600,
-    color: C.textMid,
-    marginBottom: 10,
-  },
-  footerNote: {
-    fontSize: 7.5,
-    color: C.slateL,
-    marginBottom: 3,
-  },
-});
-
 // ── Helpers ───────────────────────────────────────────────────────────────────
+function dataUriToBytes(uri: string): Uint8Array {
+  const b64 = uri.split(',')[1];
+  const raw = atob(b64);
+  const out = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+  return out;
+}
+
 function fmtDate(d: string): string {
   const [y, m, day] = d.split('-');
   return `${day}.${m}.${y}.`;
 }
 
 function fmtMoney(n: number | null | undefined): string {
-  if (n === null || n === undefined) return '— EUR';
+  if (n == null) return '- EUR';
   return `${new Intl.NumberFormat('hr-HR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n)} EUR`;
 }
 
@@ -277,176 +46,196 @@ const PAYMENT_LABELS: Record<string, string> = {
 // ── Data shape ────────────────────────────────────────────────────────────────
 export interface InvoiceData {
   invoiceNumberDisplay: string;
-  generatedAt: string;
-  // Apartment / owner
-  apartmentName: string;
-  ownerName: string;
-  ownerOib: string;
-  ownerAddress: string;
-  ownerPostalCode: string;
-  ownerCity: string;
-  ownerCountry: string;
-  // Reservation / guest
-  guestName: string;
-  checkIn: string;
-  checkOut: string;
-  numNights: number;
-  numGuests: number;
-  amountGross: number | null;
-  paymentType: string | null;
+  generatedAt:      string;
+  apartmentName:    string;
+  ownerName:        string;
+  ownerOib:         string;
+  ownerAddress:     string;
+  ownerPostalCode:  string;
+  ownerCity:        string;
+  ownerCountry:     string;
+  guestName:        string;
+  checkIn:          string;
+  checkOut:         string;
+  numNights:        number;
+  numGuests:        number;
+  amountGross:      number | null;
+  paymentType:      string | null;
 }
 
-// ── Component ─────────────────────────────────────────────────────────────────
-const InvoiceDoc = ({ d }: { d: InvoiceData }) => {
-  const pricePerNight = d.amountGross !== null && d.numNights > 0
-    ? d.amountGross / d.numNights
-    : null;
-
-  const genDate = new Date(d.generatedAt);
-  const genDateStr = `${String(genDate.getDate()).padStart(2, '0')}. ${String(genDate.getMonth() + 1).padStart(2, '0')}. ${genDate.getFullYear()}.`;
-  const genTimeStr = `${String(genDate.getHours()).padStart(2, '0')}:${String(genDate.getMinutes()).padStart(2, '0')}`;
-
-  const paymentLabel = d.paymentType ? (PAYMENT_LABELS[d.paymentType] ?? d.paymentType) : '—';
-
-  return (
-    <Document>
-      <Page size="A4" style={s.page}>
-
-        {/* ── Dark header band ───────────────────────────────────────────── */}
-        <View style={s.headerBand}>
-          <View>
-            <Text style={s.headerAptName}>{d.apartmentName}</Text>
-            <Text style={s.headerAptSub}>Iznajmljivanje apartmana</Text>
-          </View>
-          <View style={s.headerRight}>
-            <Text style={s.headerTitle}>Račun / Invoice</Text>
-            <Text style={s.headerNumber}>#{d.invoiceNumberDisplay}</Text>
-          </View>
-        </View>
-
-        {/* ── Body ──────────────────────────────────────────────────────── */}
-        <View style={s.body}>
-
-          {/* ── Two-column info ─────────────────────────────────────────── */}
-          <View style={s.infoRow}>
-
-            {/* Left: Owner */}
-            <View style={s.infoBlock}>
-              <Text style={s.infoLabel}>Iznajmljivač / Owner</Text>
-              <Text style={s.infoName}>{d.ownerName}</Text>
-              <Text style={s.infoLine}>
-                <Text style={s.infoLabelInline}>OIB / PIN: </Text>
-                {d.ownerOib}
-              </Text>
-              <Text style={s.infoLine}>{d.ownerAddress}</Text>
-              <Text style={s.infoLine}>{d.ownerPostalCode} {d.ownerCity}</Text>
-              <Text style={s.infoLine}>{d.ownerCountry}</Text>
-            </View>
-
-            {/* Right: Guest + stay */}
-            <View style={s.infoBlockRight}>
-              <Text style={s.infoLabel}>Gost / Guest</Text>
-              <Text style={s.infoName}>{d.guestName}</Text>
-              {d.numGuests > 1 && (
-                <Text style={s.infoLine}>{d.numGuests} gosta</Text>
-              )}
-              <Text style={[s.infoLine, { marginTop: 8 }]}>
-                <Text style={s.infoLabelInline}>Vrijeme boravka / Time of stay: </Text>
-              </Text>
-              <Text style={s.infoLine}>
-                {fmtDate(d.checkIn)} - {fmtDate(d.checkOut)}
-              </Text>
-              <Text style={[s.infoLine, { marginTop: 6 }]}>
-                <Text style={s.infoLabelInline}>Način plaćanja / Payment type: </Text>
-              </Text>
-              <Text style={s.infoLine}>{paymentLabel}</Text>
-            </View>
-
-          </View>
-
-          <View style={s.divider} />
-
-          {/* ── Table ───────────────────────────────────────────────────── */}
-          <View style={s.tableHead}>
-            <View style={s.cService}>
-              <Text style={s.tableHeadCell}>Usluga</Text>
-              <Text style={s.tableHeadCellSub}>/ Service</Text>
-            </View>
-            <View style={s.cUnit}>
-              <Text style={s.tableHeadCell}>Jedinica</Text>
-              <Text style={s.tableHeadCellSub}>/ Unit</Text>
-            </View>
-            <View style={[s.cQty, { alignItems: 'center' }]}>
-              <Text style={s.tableHeadCell}>Kol.</Text>
-              <Text style={s.tableHeadCellSub}>/ Qty</Text>
-            </View>
-            <View style={[s.cPrice, { alignItems: 'flex-end' }]}>
-              <Text style={s.tableHeadCell}>Cijena</Text>
-              <Text style={s.tableHeadCellSub}>/ Price</Text>
-            </View>
-            <View style={[s.cTotal, { alignItems: 'flex-end' }]}>
-              <Text style={s.tableHeadCell}>Ukupno</Text>
-              <Text style={s.tableHeadCellSub}>/ Total</Text>
-            </View>
-          </View>
-
-          <View style={s.tableRow}>
-            <View style={s.cService}>
-              <Text style={s.tableCellBold}>Noćenje</Text>
-              <Text style={[s.tableCell, { fontSize: 8, color: C.slate }]}>/ Accommodation</Text>
-            </View>
-            <View style={s.cUnit}>
-              <Text style={s.tableCell}>{d.apartmentName}</Text>
-            </View>
-            <View style={[s.cQty, { alignItems: 'center' }]}>
-              <Text style={s.tableCell}>{d.numNights}</Text>
-            </View>
-            <View style={[s.cPrice, { alignItems: 'flex-end' }]}>
-              <Text style={s.tableCell}>
-                {pricePerNight !== null ? fmtMoney(pricePerNight) : '—'}
-              </Text>
-            </View>
-            <View style={[s.cTotal, { alignItems: 'flex-end' }]}>
-              <Text style={s.tableCellBold}>{fmtMoney(d.amountGross)}</Text>
-            </View>
-          </View>
-
-          {/* ── Summary ─────────────────────────────────────────────────── */}
-          <View style={s.summaryWrap}>
-            <View style={s.summaryRow}>
-              <Text style={s.summaryLabel}>Ukupna cijena / Total price</Text>
-              <Text style={s.summaryValue}>{fmtMoney(d.amountGross)}</Text>
-            </View>
-            <View style={s.summaryDivider} />
-            <View style={s.totalRow}>
-              <Text style={s.totalLabel}>Ukupno / Total</Text>
-              <Text style={s.totalValue}>{fmtMoney(d.amountGross)}</Text>
-            </View>
-          </View>
-
-        </View>
-
-        {/* ── Footer ────────────────────────────────────────────────────── */}
-        <View style={s.footer}>
-          <Text style={s.footerDate}>
-            Datum / Date: {genDateStr} {genTimeStr}
-          </Text>
-          <Text style={s.footerNote}>
-            PDV nije uračunat u cijenu temeljem čl. 90, st. 2 Zakona o PDV-u / VAT is not included in the price according to Art. 90, paragraph 2 of the VAT Law
-          </Text>
-          <Text style={s.footerNote}>
-            Turistička pristojba uključena je u cijenu / Tourist tax included in the price of service
-          </Text>
-        </View>
-
-      </Page>
-    </Document>
-  );
-};
-
-// ── Export ────────────────────────────────────────────────────────────────────
+// ── Generator ─────────────────────────────────────────────────────────────────
 export async function generateInvoicePdf(data: InvoiceData): Promise<Uint8Array> {
-  const blob = await pdf(React.createElement(InvoiceDoc, { d: data })).toBlob();
-  const arrayBuffer = await blob.arrayBuffer();
-  return new Uint8Array(arrayBuffer);
+  const pdfDoc = await PDFDocument.create();
+  const page   = pdfDoc.addPage([595, 842]);
+  const { width, height } = page.getSize();
+  const pad = 40;
+
+  // Embed Inter WOFF fonts — pdf-lib uses fontkit internally which handles WOFF1
+  const f4 = await pdfDoc.embedFont(dataUriToBytes(INTER_400), { subset: true });
+  const f6 = await pdfDoc.embedFont(dataUriToBytes(INTER_600), { subset: true });
+  const f7 = await pdfDoc.embedFont(dataUriToBytes(INTER_700), { subset: true });
+
+  // ── Footer (drawn first so body draws on top if overlap ever occurs) ──────
+  const footerH = 80;
+  page.drawRectangle({ x: 0, y: 0, width, height: footerH, color: C.bg });
+  page.drawLine({
+    start: { x: 0, y: footerH }, end: { x: width, y: footerH },
+    thickness: 1, color: C.border,
+  });
+
+  const gd = new Date(data.generatedAt);
+  const dateStr = `${String(gd.getDate()).padStart(2, '0')}. ${String(gd.getMonth() + 1).padStart(2, '0')}. ${gd.getFullYear()}. ${String(gd.getHours()).padStart(2, '0')}:${String(gd.getMinutes()).padStart(2, '0')}`;
+
+  page.drawText(`Datum / Date: ${dateStr}`, {
+    x: pad, y: footerH - 16, size: 9, font: f6, color: C.mid,
+  });
+  page.drawText(
+    'PDV nije uracunat u cijenu temeljem cl. 90, st. 2 Zakona o PDV-u /',
+    { x: pad, y: footerH - 30, size: 7, font: f4, color: C.slateL }
+  );
+  page.drawText(
+    'VAT is not included in the price according to Art. 90, paragraph 2 of the VAT Law',
+    { x: pad, y: footerH - 40, size: 7, font: f4, color: C.slateL }
+  );
+  page.drawText(
+    'Turisticka pristojba ukljucena je u cijenu / Tourist tax included in the price of service',
+    { x: pad, y: footerH - 52, size: 7, font: f4, color: C.slateL }
+  );
+
+  // ── Header band ──────────────────────────────────────────────────────────────
+  const headerH = 80;
+  const headerY = height - headerH;  // 762
+  page.drawRectangle({ x: 0, y: headerY, width, height: headerH, color: C.navy });
+
+  page.drawText(data.apartmentName, {
+    x: pad, y: headerY + 46, size: 14, font: f7, color: C.white,
+  });
+  page.drawText('Iznajmljivanje apartmana', {
+    x: pad, y: headerY + 30, size: 8, font: f4, color: C.blueL,
+  });
+
+  const lblText = 'RACUN / INVOICE';
+  const lblW = f4.widthOfTextAtSize(lblText, 9);
+  page.drawText(lblText, {
+    x: width - pad - lblW, y: headerY + 54, size: 9, font: f4, color: C.blueL,
+  });
+
+  const numText = `#${data.invoiceNumberDisplay}`;
+  const numW = f7.widthOfTextAtSize(numText, 20);
+  page.drawText(numText, {
+    x: width - pad - numW, y: headerY + 24, size: 20, font: f7, color: C.white,
+  });
+
+  // ── Two-column info section ───────────────────────────────────────────────────
+  const colL = pad;
+  const colR = Math.floor(width / 2) + 10;
+  let y = headerY - 28;  // 734
+
+  page.drawText('IZNAJMLJIVAC / OWNER', { x: colL, y, size: 7, font: f6, color: C.slateL });
+  page.drawText('GOST / GUEST',         { x: colR, y, size: 7, font: f6, color: C.slateL });
+  y -= 16;
+
+  page.drawText(data.ownerName, { x: colL, y, size: 11, font: f7, color: C.text });
+  page.drawText(data.guestName, { x: colR, y, size: 11, font: f7, color: C.text });
+  y -= 14;
+
+  // Helper: draw one row on both columns and advance y by 12
+  const row = (
+    left: string | null, lf: typeof f4,
+    right: string | null, rf: typeof f4,
+    sz = 9,
+  ) => {
+    if (left)  page.drawText(left,  { x: colL, y, size: sz, font: lf, color: C.mid });
+    if (right) page.drawText(right, { x: colR, y, size: sz, font: rf, color: C.mid });
+    y -= 12;
+  };
+
+  row(`OIB / PIN: ${data.ownerOib}`,               f4, data.numGuests > 1 ? `${data.numGuests} gosta` : null, f4);
+  row(data.ownerAddress,                            f4, 'Vrijeme boravka / Time of stay:',       f6);
+  row(`${data.ownerPostalCode} ${data.ownerCity}`,  f4, `${fmtDate(data.checkIn)} - ${fmtDate(data.checkOut)}`, f4);
+  row(data.ownerCountry,                            f4, 'Nacin placanja / Payment type:',         f6);
+  row(null, f4, data.paymentType ? (PAYMENT_LABELS[data.paymentType] ?? data.paymentType) : '-', f4);
+
+  y -= 12;
+
+  // Divider
+  page.drawLine({
+    start: { x: pad, y }, end: { x: width - pad, y },
+    thickness: 1, color: C.border,
+  });
+  y -= 16;
+
+  // ── Table header ─────────────────────────────────────────────────────────────
+  const thH = 28;
+  page.drawRectangle({ x: pad, y: y - thH, width: width - pad * 2, height: thH, color: C.navy });
+
+  const c1 = pad + 10;
+  const c2 = pad + 155;
+  const c3 = pad + 295;
+  const c4 = pad + 340;
+  const cR = width - pad - 10;
+  const thY = y - thH + 10;
+
+  page.drawText('Usluga / Service', { x: c1, y: thY, size: 8, font: f7, color: C.white });
+  page.drawText('Jedinica / Unit',  { x: c2, y: thY, size: 8, font: f7, color: C.white });
+  page.drawText('Kol.',             { x: c3, y: thY, size: 8, font: f7, color: C.white });
+  page.drawText('Cijena / Price',   { x: c4, y: thY, size: 8, font: f7, color: C.white });
+  const totHdr = 'Ukupno / Total';
+  page.drawText(totHdr, {
+    x: cR - f7.widthOfTextAtSize(totHdr, 8), y: thY, size: 8, font: f7, color: C.white,
+  });
+  y -= thH;
+
+  // ── Table row ─────────────────────────────────────────────────────────────────
+  const pricePN = data.amountGross != null && data.numNights > 0
+    ? data.amountGross / data.numNights : null;
+  const rY1 = y - 14;
+  const rY2 = y - 25;
+
+  page.drawText('Nocenje',         { x: c1, y: rY1, size: 9,   font: f7, color: C.text });
+  page.drawText('/ Accommodation', { x: c1, y: rY2, size: 7.5, font: f4, color: C.slate });
+
+  const aptDisp = data.apartmentName.length > 18
+    ? data.apartmentName.slice(0, 16) + '...' : data.apartmentName;
+  page.drawText(aptDisp,               { x: c2, y: rY1, size: 9, font: f4, color: C.mid });
+  page.drawText(String(data.numNights),{ x: c3, y: rY1, size: 9, font: f4, color: C.mid });
+  page.drawText(pricePN != null ? fmtMoney(pricePN) : '-', { x: c4, y: rY1, size: 9, font: f4, color: C.mid });
+
+  const totStr = fmtMoney(data.amountGross);
+  page.drawText(totStr, {
+    x: cR - f7.widthOfTextAtSize(totStr, 9), y: rY1, size: 9, font: f7, color: C.text,
+  });
+
+  y -= 36;
+  page.drawLine({
+    start: { x: pad, y }, end: { x: width - pad, y },
+    thickness: 1, color: C.border,
+  });
+  y -= 12;
+
+  // ── Summary ───────────────────────────────────────────────────────────────────
+  const sumX = width - pad - 200;
+
+  const sumV = fmtMoney(data.amountGross);
+  page.drawText('Ukupna cijena / Total price', { x: sumX, y, size: 9, font: f4, color: C.slate });
+  page.drawText(sumV, {
+    x: width - pad - f4.widthOfTextAtSize(sumV, 9), y, size: 9, font: f4, color: C.mid,
+  });
+  y -= 14;
+
+  page.drawLine({ start: { x: sumX, y }, end: { x: width - pad, y }, thickness: 1, color: C.border });
+  y -= 10;
+
+  // Total highlight box
+  page.drawRectangle({
+    x: sumX - 14, y: y - 8, width: width - pad - (sumX - 14), height: 28, color: C.bg,
+  });
+
+  page.drawText('Ukupno / Total', { x: sumX, y: y + 2, size: 11, font: f7, color: C.navy });
+  const grand = fmtMoney(data.amountGross);
+  page.drawText(grand, {
+    x: width - pad - f7.widthOfTextAtSize(grand, 11), y: y + 2, size: 11, font: f7, color: C.blue,
+  });
+
+  return pdfDoc.save();
 }
