@@ -442,3 +442,44 @@ export async function sendTaskCompletedEmail({
     `,
   });
 }
+
+// ─── Email #11: Odgovor na pozivnicu — obavijest adminu ───────────────────────
+export async function sendInviteResponseEmail({
+  to,
+  adminName,
+  staffName,
+  apartmentName,
+  action,
+}: {
+  to: string;
+  adminName: string;
+  staffName: string;
+  apartmentName: string;
+  action: 'accept' | 'decline';
+}) {
+  const accepted = action === 'accept';
+  return sendEmail({
+    from: getFromEmail(),
+    to,
+    subject: `${staffName} ${accepted ? 'prihvatio/la' : 'odbio/la'} pozivnicu — ${apartmentName}`,
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #111827;">
+        <div style="background: #0F2544; padding: 24px 32px; border-radius: 8px 8px 0 0;">
+          <h1 style="color: white; margin: 0; font-size: 20px;">Moji Apartmani</h1>
+        </div>
+        <div style="background: #F9FAFB; padding: 32px; border-radius: 0 0 8px 8px; border: 1px solid #E5E7EB; border-top: none;">
+          <p style="font-size: 16px; margin: 0 0 16px;">Hej <strong>${adminName}</strong>,</p>
+          <p style="font-size: 15px; color: #374151; margin: 0 0 24px;">
+            <strong>${staffName}</strong> je <strong style="color: ${accepted ? '#065F46' : '#DC2626'}">${accepted ? 'prihvatio/la' : 'odbio/la'}</strong> pozivnicu za apartman <strong>${apartmentName}</strong>.
+          </p>
+          <div style="background: white; border: 1px solid ${accepted ? '#6EE7B7' : '#FCA5A5'}; border-radius: 8px; padding: 16px; margin-bottom: 24px;">
+            <p style="margin: 0; font-size: 15px; color: ${accepted ? '#065F46' : '#DC2626'}; font-weight: bold;">
+              ${accepted ? '✅ Pozivnica prihvaćena' : '❌ Pozivnica odbijena'}
+            </p>
+          </div>
+          <p style="font-size: 12px; color: #9CA3AF; margin: 0;">Moji Apartmani — upravljanje apartmanima</p>
+        </div>
+      </div>
+    `,
+  });
+}

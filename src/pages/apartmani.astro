@@ -1,12 +1,13 @@
 ---
 import AppLayout from '../layouts/AppLayout.astro';
-import { createSupabaseServerClient } from '../lib/supabase';
+import { createSupabaseServerClient, createSupabaseAdminClient } from '../lib/supabase';
 
 const supabase = createSupabaseServerClient(Astro.request, Astro.cookies);
 const { data: { user } } = await supabase.auth.getUser();
 if (!user) return Astro.redirect('/login');
 
 const profile = Astro.locals.user!;
+const adminSupabase = createSupabaseAdminClient();
 
 const APT_COLORS = [
   { hex: '#3B82F6', label: 'Plava' },
@@ -21,7 +22,7 @@ const APT_COLORS = [
   { hex: '#84CC16', label: 'Limeta' },
 ];
 
-// Dohvati apartmane gdje je korisnik admin
+// Dohvati sve apartmane korisnika (admin + staff)
 const { data: apartmentUsers } = await supabase
   .from('apartment_users')
   .select('role, apartments(*)')
@@ -30,7 +31,41 @@ const { data: apartmentUsers } = await supabase
 const adminApartmentUsers = (apartmentUsers ?? []).filter((au) => au.role === 'admin');
 const apartments = adminApartmentUsers
   .map((au) => au.apartments)
-  .filter((a) => a && !a.is_deleted);
+  .filter((a) => a && !(a as any).is_deleted);
+
+const staffApartmentUsers = (apartmentUsers ?? []).filter((au) => au.role === 'staff');
+const staffApartments = staffApartmentUsers
+  .map((au) => au.apartments)
+  .filter((a) => a && !(a as any).is_deleted);
+
+// Dohvati pending pozivnice za ovog korisnika
+const { data: rawPendingInvites } = await adminSupabase
+  .from('invite_tokens')
+  .select('*')
+  .eq('email', profile.email)
+  .is('accepted_at', null)
+  .gt('expires_at', new Date().toISOString());
+
+// Za svaku pozivnicu dohvati nazive apartmana i ime onoga koji je pozvao
+const pendingInvites = await Promise.all(
+  (rawPendingInvites ?? []).map(async (invite: any) => {
+    const { data: apts } = await adminSupabase
+      .from('apartments')
+      .select('name')
+      .in('id', invite.apartment_ids);
+    const { data: inviter } = await adminSupabase
+      .from('profiles')
+      .select('full_name')
+      .eq('id', invite.invited_by)
+      .single();
+    return {
+      id: invite.id as string,
+      apartmentNames: (apts ?? []).map((a: any) => a.name).join(', '),
+      inviterName: inviter?.full_name ?? 'Admin',
+      role: invite.role as string,
+    };
+  })
+);
 
 const hasAnyEntries = (apartmentUsers ?? []).length > 0;
 const isAdmin = adminApartmentUsers.length > 0 || !hasAnyEntries;
@@ -40,11 +75,12 @@ const error = Astro.url.searchParams.get('error');
 
 <AppLayout title="Apartmani" user={profile} isAdmin={true} activeRoute="/apartmani">
   <div class="p-6 max-w-7xl mx-auto">
+
     <!-- Header -->
     <div class="flex items-center justify-between mb-6">
       <div>
         <h1 class="text-2xl font-bold text-gray-900">Apartmani</h1>
-        <p class="text-gray-500 text-sm mt-1">{apartments.length} apartman{apartments.length === 1 ? '' : apartments.length < 5 ? 'a' : 'a'}</p>
+        <p class="text-gray-500 text-sm mt-1">{apartments.length} apartman{apartments.length === 1 ? '' : 'a'}</p>
       </div>
       <button
         onclick="document.getElementById('modal-add').classList.remove('hidden')"
@@ -54,58 +90,130 @@ const error = Astro.url.searchParams.get('error');
       </button>
     </div>
 
-
-    <!-- Grid kartice -->
-    {apartments.length === 0 ? (
-      <div class="card p-12 text-center">
-        <div class="text-gray-400 mb-4">
-          <svg class="mx-auto h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-          </svg>
+    <!-- Pozivnice na čekanju -->
+    {pendingInvites.length > 0 && (
+      <div class="mb-8">
+        <h2 class="text-lg font-semibold text-gray-900 mb-3">Pozivnice na čekanju</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {pendingInvites.map((invite) => (
+            <div class="card p-5 border-l-4 border-blue-500">
+              <div class="flex items-start gap-3 mb-4">
+                <div class="h-10 w-10 rounded-lg bg-blue-50 flex items-center justify-center flex-shrink-0">
+                  <svg class="h-5 w-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                  </svg>
+                </div>
+                <div class="min-w-0">
+                  <h3 class="font-semibold text-gray-900 truncate">{invite.apartmentNames}</h3>
+                  <p class="text-sm text-gray-500">Poziva: {invite.inviterName}</p>
+                  <span class="inline-block mt-1 text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded">Osoblje</span>
+                </div>
+              </div>
+              <div class="flex gap-2">
+                <button
+                  onclick={`respondToInvite('${invite.id}', 'accept', event)`}
+                  class="btn-primary text-sm flex-1"
+                >
+                  Prihvati
+                </button>
+                <button
+                  onclick={`respondToInvite('${invite.id}', 'decline', event)`}
+                  class="btn-secondary text-sm flex-1 !text-red-600 hover:!bg-red-50"
+                >
+                  Odbij
+                </button>
+              </div>
+            </div>
+          ))}
         </div>
-        <h3 class="text-lg font-medium text-gray-900 mb-2">Nema apartmana</h3>
-        <p class="text-gray-500 mb-6">Dodajte prvi apartman da biste počeli koristiti aplikaciju.</p>
-        <button
-          onclick="document.getElementById('modal-add').classList.remove('hidden')"
-          class="btn-primary"
-        >
-          + Dodaj apartman
-        </button>
-      </div>
-    ) : (
-      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {apartments.map((apt) => (
-          <div class="card p-5 hover:shadow-md transition-shadow">
-            <div class="flex items-start justify-between mb-3">
-              <div class="h-10 w-10 rounded-lg bg-blue-50 flex items-center justify-center flex-shrink-0">
-                <span class="text-blue-600 font-bold text-sm">{apt.name.slice(0, 2).toUpperCase()}</span>
-              </div>
-              <div class="flex gap-1">
-                <button
-                  onclick={`openEditModal(${JSON.stringify(apt)})`}
-                  class="btn-ghost text-xs px-2 py-1"
-                >
-                  Uredi
-                </button>
-                <button
-                  onclick={`confirmDelete('${apt.id}', '${apt.name}')`}
-                  class="btn-ghost text-xs px-2 py-1 text-red-500 hover:bg-red-50 hover:text-red-700"
-                >
-                  Obriši
-                </button>
-              </div>
-            </div>
-            <h3 class="font-semibold text-gray-900 mb-1">{apt.name}</h3>
-            <p class="text-sm text-gray-500">{apt.address}</p>
-            <p class="text-sm text-gray-500">{apt.postal_code} {apt.city}, {apt.country}</p>
-            <div class="mt-3 pt-3 border-t border-gray-100 flex gap-4 text-xs text-gray-500">
-              <span>Check-in: {apt.check_in_time}</span>
-              <span>Check-out: {apt.check_out_time}</span>
-            </div>
-          </div>
-        ))}
       </div>
     )}
+
+    <!-- Moji apartmani (admin) -->
+    {(apartments.length > 0 || pendingInvites.length === 0) && (
+      <div class={staffApartments.length > 0 || pendingInvites.length > 0 ? 'mb-8' : ''}>
+        {(staffApartments.length > 0 || pendingInvites.length > 0) && (
+          <h2 class="text-lg font-semibold text-gray-900 mb-3">Moji apartmani</h2>
+        )}
+        {apartments.length === 0 ? (
+          <div class="card p-12 text-center">
+            <div class="text-gray-400 mb-4">
+              <svg class="mx-auto h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+              </svg>
+            </div>
+            <h3 class="text-lg font-medium text-gray-900 mb-2">Nema apartmana</h3>
+            <p class="text-gray-500 mb-6">Dodajte prvi apartman da biste počeli koristiti aplikaciju.</p>
+            <button
+              onclick="document.getElementById('modal-add').classList.remove('hidden')"
+              class="btn-primary"
+            >
+              + Dodaj apartman
+            </button>
+          </div>
+        ) : (
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {apartments.map((apt) => (
+              <div class="card p-5 hover:shadow-md transition-shadow">
+                <div class="flex items-start justify-between mb-3">
+                  <div class="h-10 w-10 rounded-lg bg-blue-50 flex items-center justify-center flex-shrink-0">
+                    <span class="text-blue-600 font-bold text-sm">{(apt as any).name.slice(0, 2).toUpperCase()}</span>
+                  </div>
+                  <div class="flex gap-1">
+                    <button
+                      onclick={`openEditModal(${JSON.stringify(apt)})`}
+                      class="btn-ghost text-xs px-2 py-1"
+                    >
+                      Uredi
+                    </button>
+                    <button
+                      onclick={`confirmDelete('${(apt as any).id}', '${(apt as any).name}')`}
+                      class="btn-ghost text-xs px-2 py-1 text-red-500 hover:bg-red-50 hover:text-red-700"
+                    >
+                      Obriši
+                    </button>
+                  </div>
+                </div>
+                <h3 class="font-semibold text-gray-900 mb-1">{(apt as any).name}</h3>
+                <p class="text-sm text-gray-500">{(apt as any).address}</p>
+                <p class="text-sm text-gray-500">{(apt as any).postal_code} {(apt as any).city}, {(apt as any).country}</p>
+                <div class="mt-3 pt-3 border-t border-gray-100 flex gap-4 text-xs text-gray-500">
+                  <span>Check-in: {(apt as any).check_in_time}</span>
+                  <span>Check-out: {(apt as any).check_out_time}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    )}
+
+    <!-- Apartmani na kojima radim (staff) -->
+    {staffApartments.length > 0 && (
+      <div>
+        <h2 class="text-lg font-semibold text-gray-900 mb-3">Apartmani na kojima radim</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {staffApartments.map((apt) => (
+            <div class="card p-5">
+              <div class="flex items-start justify-between mb-3">
+                <div class="h-10 w-10 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0">
+                  <span class="text-gray-500 font-bold text-sm">{(apt as any).name.slice(0, 2).toUpperCase()}</span>
+                </div>
+                <span class="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded-full">Osoblje</span>
+              </div>
+              <h3 class="font-semibold text-gray-900 mb-1">{(apt as any).name}</h3>
+              <p class="text-sm text-gray-500">{(apt as any).address}</p>
+              <p class="text-sm text-gray-500">{(apt as any).postal_code} {(apt as any).city}, {(apt as any).country}</p>
+              <div class="mt-3 pt-3 border-t border-gray-100 flex gap-4 text-xs text-gray-500">
+                <span>Check-in: {(apt as any).check_in_time}</span>
+                <span>Check-out: {(apt as any).check_out_time}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    )}
+
   </div>
 
   <!-- Modal: Dodaj apartman -->
@@ -368,6 +476,32 @@ const error = Astro.url.searchParams.get('error');
   (window as any).openEditModal = openEditModal;
   (window as any).confirmDelete = confirmDelete;
   (window as any).selectColor = selectColor;
+
+  async function respondToInvite(tokenId: string, action: string, event: MouseEvent) {
+    const btn = event.currentTarget as HTMLButtonElement;
+    btn.disabled = true;
+    btn.textContent = action === 'accept' ? 'Prihvaćam...' : 'Odbijam...';
+    try {
+      const res = await fetch('/api/invite/respond', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token_id: tokenId, action }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        showToast(data.error ?? 'Greška', 'error');
+        btn.disabled = false;
+        btn.textContent = action === 'accept' ? 'Prihvati' : 'Odbij';
+        return;
+      }
+      showToast(action === 'accept' ? 'Pozivnica prihvaćena!' : 'Pozivnica odbijena.', action === 'accept' ? 'success' : 'error');
+      setTimeout(() => window.location.reload(), 1200);
+    } catch {
+      showToast('Greška pri odgovoru na pozivnicu', 'error');
+      btn.disabled = false;
+    }
+  }
+  (window as any).respondToInvite = respondToInvite;
 
   function showToast(message: string, type: 'success' | 'error' = 'success') {
     let toast = document.getElementById('_toast');
