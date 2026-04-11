@@ -111,7 +111,7 @@ const occupancy = Math.min(100, Math.round((reservedDays / totalDays) * 100));
 const { data: checkoutsToday } = await adminSupabase
   .from('reservations')
   .select('id, guest_name, check_in, check_out, apartment_id')
-  .in('apartment_id', apartmentIds.length ? apartmentIds : ['none'])
+  .in('apartment_id', filteredAptIds.length ? filteredAptIds : ['none'])
   .eq('check_out', todayStr)
   .eq('status', 'active')
   .order('check_out');
@@ -120,7 +120,7 @@ const { data: checkoutsToday } = await adminSupabase
 const { data: checkinsToday } = await adminSupabase
   .from('reservations')
   .select('id, guest_name, check_in, check_out, apartment_id')
-  .in('apartment_id', apartmentIds.length ? apartmentIds : ['none'])
+  .in('apartment_id', filteredAptIds.length ? filteredAptIds : ['none'])
   .eq('check_in', todayStr)
   .eq('status', 'active')
   .order('check_in');
@@ -179,11 +179,11 @@ const prihodiLabels = Object.keys(prihodiByType).map((k) => PAYMENT_LABELS[k] ??
 const prihodiValues = Object.values(prihodiByType);
 const prihodiColors = Object.keys(prihodiByType).map((k, i) => PAYMENT_COLORS[Object.keys(PAYMENT_LABELS).indexOf(k)] ?? PAYMENT_COLORS[i % PAYMENT_COLORS.length]);
 
-// Čišćenje po osobi (sve rezervacije admin apartmana)
+// Čišćenje po osobi (filtrirane rezervacije)
 const { data: allRezForCleaning } = await adminSupabase
   .from('reservations')
   .select('id')
-  .in('apartment_id', apartmentIds.length ? apartmentIds : ['none'])
+  .in('apartment_id', filteredAptIds.length ? filteredAptIds : ['none'])
   .eq('status', 'active');
 const allRezIdList = (allRezForCleaning ?? []).map((r) => r.id);
 const { data: allCleaningData } = allRezIdList.length > 0
