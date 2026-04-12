@@ -1,6 +1,7 @@
 import type { APIRoute } from 'astro';
 import { createSupabaseServerClient, createSupabaseAdminClient } from '../../../lib/supabase';
 import { sendTaskAssignedEmail, sendTaskCancelledEmail, sendTaskAssignedExternalEmail, getAppUrl } from '../../../lib/resend';
+import { createNotificationsForMany } from '../../../lib/notifications';
 
 export const POST: APIRoute = async ({ request, cookies }) => {
   const json = (data: object, status = 200) =>
@@ -112,6 +113,24 @@ export const POST: APIRoute = async ({ request, cookies }) => {
   const dueDate = reservation.check_out.split('-').reverse().join('.');
   const emailPromises: Promise<any>[] = [];
   const appUrl = getAppUrl();
+
+  // In-app notifikacije
+  if (addedUserIds.length > 0) {
+    await createNotificationsForMany(addedUserIds, {
+      type: 'cleaning_assigned',
+      title: 'Dodjela čišćenja',
+      body: `Dodijeljen/a si za čišćenje u apartmanu ${apartmentName} dana ${dueDate}.`,
+      link: '/zadatci',
+    });
+  }
+  if (removedUserIds.length > 0) {
+    await createNotificationsForMany(removedUserIds, {
+      type: 'cleaning_cancelled',
+      title: 'Čišćenje otkazano',
+      body: `Uklonjen/a si s čišćenja u apartmanu ${apartmentName}.`,
+      link: '/zadatci',
+    });
+  }
 
   // Regular users
   const allChangedUserIds = [...addedUserIds, ...removedUserIds];

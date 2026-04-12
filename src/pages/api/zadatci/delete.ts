@@ -1,6 +1,7 @@
 import type { APIRoute } from 'astro';
 import { createSupabaseServerClient, createSupabaseAdminClient } from '../../../lib/supabase';
 import { sendTaskCancelledEmail } from '../../../lib/resend';
+import { createNotificationsForMany } from '../../../lib/notifications';
 
 export const POST: APIRoute = async ({ request, cookies, redirect }) => {
   const supabase = createSupabaseServerClient(request, cookies);
@@ -49,6 +50,16 @@ export const POST: APIRoute = async ({ request, cookies, redirect }) => {
       ? adminSupabase.from('external_members').select('id, name, email').in('id', extIds)
       : Promise.resolve({ data: [] }),
   ]);
+
+  // In-app notifikacije za assignee-je koji gube zadatak
+  if (userIds.length > 0 && apt) {
+    await createNotificationsForMany(userIds, {
+      type: 'task_cancelled',
+      title: 'Zadatak obrisan',
+      body: `Zadatak "${task.title}" je obrisan.`,
+      link: '/zadatci',
+    });
+  }
 
   // Briši
   await adminSupabase.from('task_assignees').delete().eq('task_id', id);

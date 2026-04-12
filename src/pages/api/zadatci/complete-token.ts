@@ -1,6 +1,7 @@
 import type { APIRoute } from 'astro';
 import { createSupabaseAdminClient } from '../../../lib/supabase';
 import { sendTaskCompletedEmail } from '../../../lib/resend';
+import { createNotificationsForMany } from '../../../lib/notifications';
 
 export const GET: APIRoute = async ({ url, redirect }) => {
   const token = url.searchParams.get('token');
@@ -66,6 +67,14 @@ export const GET: APIRoute = async ({ url, redirect }) => {
       adminSupabase.from('profiles').select('id, full_name, email').in('id', adminIds),
       adminSupabase.from('apartments').select('name').eq('id', task.apartment_id).single(),
     ]);
+
+    // In-app notifikacije za admine
+    await createNotificationsForMany(adminIds, {
+      type: 'task_completed',
+      title: 'Zadatak završen',
+      body: `${completedByName} je završio/la zadatak "${task.title}" u ${apt?.name ?? ''}.`,
+      link: '/zadatci',
+    });
 
     await Promise.all(
       (adminProfiles ?? []).map((p) =>

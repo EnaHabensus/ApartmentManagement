@@ -1,6 +1,7 @@
 import type { APIRoute } from 'astro';
 import { createSupabaseServerClient, createSupabaseAdminClient } from '../../../lib/supabase';
 import { sendTaskAssignedEmail, sendTaskCancelledEmail, sendTaskAssignedExternalEmail, getAppUrl } from '../../../lib/resend';
+import { createNotificationsForMany } from '../../../lib/notifications';
 
 export const POST: APIRoute = async ({ request, cookies, redirect }) => {
   const supabase = createSupabaseServerClient(request, cookies);
@@ -116,6 +117,24 @@ export const POST: APIRoute = async ({ request, cookies, redirect }) => {
   const appUrl = getAppUrl();
 
   const emailPromises: Promise<any>[] = [];
+
+  // In-app notifikacije
+  if (addedUserIds.length > 0) {
+    await createNotificationsForMany(addedUserIds, {
+      type: 'task_assigned',
+      title: 'Novi zadatak',
+      body: `Dodijeljen ti je zadatak "${taskData?.title}" u apartmanu ${aptName}.`,
+      link: '/zadatci',
+    });
+  }
+  if (removedUserIds.length > 0) {
+    await createNotificationsForMany(removedUserIds, {
+      type: 'task_cancelled',
+      title: 'Zadatak otkazan',
+      body: `Uklonjen/a si s zadatka "${taskData?.title}".`,
+      link: '/zadatci',
+    });
+  }
 
   // Regular users
   if (addedUserIds.length > 0 || removedUserIds.length > 0) {

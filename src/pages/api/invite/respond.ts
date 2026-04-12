@@ -1,6 +1,7 @@
 import type { APIRoute } from 'astro';
 import { createSupabaseAdminClient, createSupabaseServerClient } from '../../../lib/supabase';
 import { sendInviteResponseEmail } from '../../../lib/resend';
+import { createNotification } from '../../../lib/notifications';
 
 export const POST: APIRoute = async ({ request, cookies }) => {
   const supabase = createSupabaseServerClient(request, cookies);
@@ -91,6 +92,17 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     .select('email, full_name')
     .eq('id', invite.invited_by)
     .single();
+
+  // In-app notifikacija za osobu koja je poslala pozivnicu
+  if (invite.invited_by) {
+    await createNotification({
+      user_id: invite.invited_by,
+      type: action === 'accept' ? 'invite_accepted' : 'invite_declined',
+      title: action === 'accept' ? 'Pozivnica prihvaćena' : 'Pozivnica odbijena',
+      body: `${profile.full_name} je ${action === 'accept' ? 'prihvatio/la' : 'odbio/la'} pozivnicu za ${apartmentName}.`,
+      link: '/korisnici',
+    });
+  }
 
   if (inviterProfile?.email) {
     await sendInviteResponseEmail({

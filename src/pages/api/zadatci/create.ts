@@ -1,6 +1,7 @@
 import type { APIRoute } from 'astro';
 import { createSupabaseServerClient, createSupabaseAdminClient } from '../../../lib/supabase';
 import { sendTaskAssignedEmail, sendTaskAssignedExternalEmail, getAppUrl } from '../../../lib/resend';
+import { createNotificationsForMany } from '../../../lib/notifications';
 
 export const POST: APIRoute = async ({ request, cookies, redirect }) => {
   const supabase = createSupabaseServerClient(request, cookies);
@@ -92,6 +93,16 @@ export const POST: APIRoute = async ({ request, cookies, redirect }) => {
     const aptName = apt?.name ?? '';
     const tokenMap = new Map((insertedExtRows ?? []).map((r: any) => [r.external_member_id, r.completion_token]));
     const appUrl = getAppUrl();
+
+    // In-app notifikacije za regularne korisnike
+    if (assignee_ids.length > 0) {
+      await createNotificationsForMany(assignee_ids, {
+        type: 'task_assigned',
+        title: 'Novi zadatak',
+        body: `Dodijeljen ti je zadatak "${title}" u apartmanu ${aptName}.`,
+        link: '/zadatci',
+      });
+    }
 
     await Promise.all([
       ...(profiles ?? []).map((p) =>
