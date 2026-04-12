@@ -73,10 +73,11 @@ export async function generateInvoicePdf(data: InvoiceData): Promise<Uint8Array>
   const { width, height } = page.getSize();
   const pad = 40;
 
-  // Fonts are pre-converted TTF (not WOFF) — fontkit embeds them directly, no decompression.
-  const f4 = await pdfDoc.embedFont(dataUriToBytes(INTER_TTF_400), { subset: true });
-  const f6 = await pdfDoc.embedFont(dataUriToBytes(INTER_TTF_600), { subset: true });
-  const f7 = await pdfDoc.embedFont(dataUriToBytes(INTER_TTF_700), { subset: true });
+  // subset:false embeds the full TTF — fontkit's glyph subsetter fails on our converted TTF,
+  // producing empty glyphs. Full embed is ~170 KB total but works correctly everywhere.
+  const f4 = await pdfDoc.embedFont(dataUriToBytes(INTER_TTF_400), { subset: false });
+  const f6 = await pdfDoc.embedFont(dataUriToBytes(INTER_TTF_600), { subset: false });
+  const f7 = await pdfDoc.embedFont(dataUriToBytes(INTER_TTF_700), { subset: false });
 
   // ── Footer (drawn first so body draws on top if needed) ───────────────────
   const footerH = 80;
