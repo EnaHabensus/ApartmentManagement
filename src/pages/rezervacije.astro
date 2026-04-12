@@ -602,8 +602,8 @@ const tabs = [
             })}
           </tbody>
         </table>
-        </div>{/* end desktop table */}
-      </>{/* end fragment */}
+        </div>
+      </>
     )}
   </div>
 
@@ -828,10 +828,11 @@ const tabs = [
   _cleaningDataInit: Object.fromEntries([...cleaningMap.entries()]),
   _isAdminInit: isAdmin,
 }}>
-  (window as any)._aptUsers        = _aptUsersInit;
-  (window as any)._aptExtMembers   = _aptExtMembersInit;
-  (window as any)._cleaningData    = _cleaningDataInit;
-  (window as any)._isAdmin         = _isAdminInit;
+  // define:vars je plain JS, bez TypeScript sintakse
+  window._aptUsers      = _aptUsersInit;
+  window._aptExtMembers = _aptExtMembersInit;
+  window._cleaningData  = _cleaningDataInit;
+  window._isAdmin       = _isAdminInit;
 </script>
 
 <script>
