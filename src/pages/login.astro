@@ -9,69 +9,108 @@ const error = Astro.url.searchParams.get('error');
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Prijava — Moji Apartmani</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   </head>
-  <body class="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-    <div class="w-full max-w-md">
-      <!-- Logo -->
-      <div class="text-center mb-8">
-        <div class="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-blue-600 mb-4">
-          <span class="text-white font-bold text-xl">A</span>
+  <body class="min-h-screen bg-white overflow-hidden relative flex flex-col">
+
+    <!-- Gradijentni blob pozadina (Stripe-style) -->
+    <div class="fixed inset-0 pointer-events-none overflow-hidden">
+      <!-- Plavi blob — gore lijevo -->
+      <div class="absolute -top-32 -left-32 w-96 h-96 rounded-full bg-blue-400/25 blur-3xl"></div>
+      <!-- Narančasti blob — gore desno -->
+      <div class="absolute -top-24 right-[-80px] w-[640px] h-[520px] rounded-full bg-gradient-to-bl from-orange-400/70 via-amber-300/50 to-transparent blur-2xl"></div>
+      <!-- Ružičasti blob — desno sredina -->
+      <div class="absolute top-[30%] right-[-60px] w-[520px] h-[560px] rounded-full bg-gradient-to-l from-pink-500/60 via-rose-400/30 to-transparent blur-2xl"></div>
+      <!-- Ljubičasti blob — dolje desno -->
+      <div class="absolute bottom-[-60px] right-0 w-[480px] h-[420px] rounded-full bg-gradient-to-tl from-violet-500/50 via-purple-400/30 to-transparent blur-2xl"></div>
+    </div>
+
+    <!-- Logo — gore lijevo -->
+    <div class="relative z-10 p-7">
+      <a href="/" class="inline-flex items-center gap-2.5">
+        <div class="h-7 w-7 rounded-lg bg-blue-600 flex items-center justify-center">
+          <span class="text-white font-bold text-[11px] tracking-tight">MA</span>
         </div>
-        <h1 class="text-2xl font-bold text-gray-900">Moji Apartmani</h1>
-        <p class="text-gray-500 mt-1">Prijavite se u svoj račun</p>
-      </div>
+        <span class="text-sm font-semibold text-slate-900">Moji Apartmani</span>
+      </a>
+    </div>
 
-      <!-- Kartica -->
-      <div class="card p-8">
-        {error && (
-          <div class="mb-4 rounded-lg bg-red-50 border border-red-200 p-3">
-            <p class="text-sm text-red-600">
-              {error === 'invalid_credentials' && 'Email ili lozinka nisu ispravni.'}
-              {error === 'user_not_found' && 'Ne postoji korisnik s tim emailom.'}
-              {error === 'server_error' && 'Došlo je do greške. Pokušajte ponovno.'}
-              {error !== 'invalid_credentials' && error !== 'user_not_found' && error !== 'server_error' && error}
-            </p>
+    <!-- Forma — centrirana -->
+    <div class="relative z-10 flex flex-1 items-center justify-center px-4 pb-12">
+      <div class="w-full max-w-[440px]">
+
+        <!-- Kartica -->
+        <div class="bg-white rounded-2xl shadow-[0_8px_40px_rgba(0,0,0,0.12)] p-9">
+
+          <h1 class="text-[22px] font-semibold text-slate-900 mb-7 tracking-tight">
+            Prijavite se u račun
+          </h1>
+
+          {error && (
+            <div class="mb-5 rounded-xl bg-red-50 border border-red-200 px-4 py-3">
+              <p class="text-sm text-red-600">
+                {error === 'invalid_credentials' && 'Email ili lozinka nisu ispravni.'}
+                {error === 'user_not_found' && 'Ne postoji korisnik s tim emailom.'}
+                {error === 'server_error' && 'Došlo je do greške. Pokušajte ponovno.'}
+                {!['invalid_credentials','user_not_found','server_error'].includes(error) && error}
+              </p>
+            </div>
+          )}
+
+          <form action="/api/auth/login" method="POST" class="space-y-4">
+            <div>
+              <label for="email" class="block text-sm font-medium text-slate-700 mb-1.5">
+                Email adresa
+              </label>
+              <input
+                id="email"
+                name="email"
+                type="email"
+                autocomplete="email"
+                required
+                class="input"
+                placeholder="vas@email.com"
+              />
+            </div>
+
+            <div>
+              <label for="password" class="block text-sm font-medium text-slate-700 mb-1.5">
+                Lozinka
+              </label>
+              <input
+                id="password"
+                name="password"
+                type="password"
+                autocomplete="current-password"
+                required
+                class="input"
+                placeholder="••••••••"
+              />
+            </div>
+
+            <button
+              type="submit"
+              class="mt-2 w-full rounded-lg bg-blue-600 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+            >
+              Prijavi se
+            </button>
+          </form>
+
+          <!-- Divider -->
+          <div class="my-6 flex items-center gap-3">
+            <div class="h-px flex-1 bg-slate-200"></div>
+            <span class="text-xs text-slate-400">Novi korisnik?</span>
+            <div class="h-px flex-1 bg-slate-200"></div>
           </div>
-        )}
 
-        <form action="/api/auth/login" method="POST" class="space-y-5">
-          <div>
-            <label for="email" class="label">Email adresa</label>
-            <input
-              id="email"
-              name="email"
-              type="email"
-              autocomplete="email"
-              required
-              class="input"
-              placeholder="vas@email.com"
-            />
-          </div>
-
-          <div>
-            <label for="password" class="label">Lozinka</label>
-            <input
-              id="password"
-              name="password"
-              type="password"
-              autocomplete="current-password"
-              required
-              class="input"
-              placeholder="••••••••"
-            />
-          </div>
-
-          <button type="submit" class="btn-primary w-full">
-            Prijavi se
-          </button>
-        </form>
-
-        <p class="mt-6 text-center text-sm text-gray-500">
-          Nemate račun?{' '}
-          <a href="/register" class="text-blue-600 font-medium hover:text-blue-700">
-            Registrirajte se
+          <a
+            href="/register"
+            class="block w-full rounded-lg border border-slate-300 py-2.5 text-center text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
+          >
+            Kreirajte račun
           </a>
-        </p>
+        </div>
+
       </div>
     </div>
   </body>
