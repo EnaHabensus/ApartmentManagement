@@ -1,5 +1,6 @@
 import type { APIRoute } from 'astro';
 import { createSupabaseServerClient, createSupabaseAdminClient } from '../../../lib/supabase';
+import { sendTaskAssignedEmail, sendTaskCancelledEmail } from '../../../lib/resend';
 
 export const POST: APIRoute = async ({ request, cookies }) => {
   const json = (data: object, status = 200) =>
@@ -36,14 +37,22 @@ export const POST: APIRoute = async ({ request, cookies }) => {
 
   if (!roleRow) return json({ error: 'Nemate pristup ovoj rezervaciji.' }, 403);
 
-  // Pronađi check_out_time apartmana
+  // Dohvati apartman (naziv + check_out_time za email i zadatak)
   const { data: apt } = await adminSupabase
     .from('apartments')
-    .select('check_out_time')
+    .select('name, check_out_time')
     .eq('id', reservation.apartment_id)
     .single();
 
   const checkOutTime = (apt as any)?.check_out_time ?? null;
+  const apartmentName = (apt as any)?.name ?? '';
+
+  // Zapamti stare čistače za email diff
+  const { data: oldCleaningRows } = await adminSupabase
+    .from('reservation_cleaning')
+    .select('user_id')
+    .eq('reservation_id', reservation_id);
+  const oldIds = new Set((oldCleaningRows ?? []).map((r) => r.user_id));
 
   // Obriši sve postojeće dodjele čišćenja i auto-zadatak za ovu rezervaciju
   const { data: existingTasks } = await adminSupabase
@@ -88,6 +97,39 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     await adminSupabase.from('task_assignees').insert(
       user_ids.map((uid) => ({ task_id: task.id, user_id: uid }))
     );
+  }
+
+  // Email notifikacije — samo za promjene (fire-and-forget)
+  const newIds = new Set(user_ids);
+  const addedIds   = user_ids.filter((uid) => !oldIds.has(uid));
+  const removedIds = [...oldIds].filter((uid) => !newIds.has(uid));
+
+  if (addedIds.length > 0 || removedIds.length > 0) {
+    const allAffectedIds = [...addedIds, ...removedIds];
+    const { data: profiles } = await adminSupabase
+      .from('profiles')
+      .select('id, full_name, email')
+      .in('id', allAffectedIds);
+
+    const profileMap = new Map((profiles ?? []).map((p) => [p.id, p]));
+    const dueDate = reservation.check_out.split('-').reverse().join('.');
+
+    for (const uid of addedIds) {
+      const p = profileMap.get(uid);
+      if (p) sendTaskAssignedEmail({
+        to: p.email, assigneeName: p.full_name,
+        apartmentName, taskTitle: 'Čišćenje',
+        dueDate, dueTime: checkOutTime,
+      }).catch(() => {});
+    }
+    for (const uid of removedIds) {
+      const p = profileMap.get(uid);
+      if (p) sendTaskCancelledEmail({
+        to: p.email, assigneeName: p.full_name,
+        apartmentName, taskTitle: 'Čišćenje',
+        dueDate, dueTime: checkOutTime,
+      }).catch(() => {});
+    }
   }
 
   return json({ success: true });
