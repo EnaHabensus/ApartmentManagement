@@ -1,8 +1,5 @@
-// ── Invoice PDF generator — pdf-lib (pure JS, no WASM, works on Cloudflare Workers) ──
-import { PDFDocument, rgb } from 'pdf-lib';
-import fontkit from '@pdf-lib/fontkit';
-// Pre-converted TTF (from WOFF1 via Node.js zlib at build time) — no runtime decompression needed.
-import { INTER_TTF_400, INTER_TTF_600, INTER_TTF_700 } from './invoice-fonts-ttf';
+// ── Invoice PDF generator — pdf-lib standard fonts (no fontkit, works everywhere) ──
+import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 
 // ── Colour palette ────────────────────────────────────────────────────────────
 const C = {
@@ -19,12 +16,13 @@ const C = {
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-function dataUriToBytes(uri: string): Uint8Array {
-  const b64 = uri.split(',')[1];
-  const raw = atob(b64);
-  const out = new Uint8Array(raw.length);
-  for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
-  return out;
+// Helvetica uses WinAnsiEncoding — transliterate Croatian diacritics to ASCII.
+function tr(s: string): string {
+  return s
+    .replace(/[ćč]/g, 'c').replace(/[ĆČ]/g, 'C')
+    .replace(/š/g, 's').replace(/Š/g, 'S')
+    .replace(/ž/g, 'z').replace(/Ž/g, 'Z')
+    .replace(/đ/g, 'd').replace(/Đ/g, 'D');
 }
 
 function fmtDate(d: string): string {
@@ -68,16 +66,14 @@ export interface InvoiceData {
 // ── Generator ─────────────────────────────────────────────────────────────────
 export async function generateInvoicePdf(data: InvoiceData): Promise<Uint8Array> {
   const pdfDoc = await PDFDocument.create();
-  pdfDoc.registerFontkit(fontkit);
   const page   = pdfDoc.addPage([595, 842]);
   const { width, height } = page.getSize();
   const pad = 40;
 
-  // subset:false embeds the full TTF — fontkit's glyph subsetter fails on our converted TTF,
-  // producing empty glyphs. Full embed is ~170 KB total but works correctly everywhere.
-  const f4 = await pdfDoc.embedFont(dataUriToBytes(INTER_TTF_400), { subset: false });
-  const f6 = await pdfDoc.embedFont(dataUriToBytes(INTER_TTF_600), { subset: false });
-  const f7 = await pdfDoc.embedFont(dataUriToBytes(INTER_TTF_700), { subset: false });
+  // Standard PDF fonts — built into every PDF viewer, no embedding needed.
+  // Helvetica = regular/semibold labels, HelveticaBold = headings/totals.
+  const fR = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  const fB = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
   // ── Footer (drawn first so body draws on top if needed) ───────────────────
   const footerH = 80;
@@ -91,19 +87,19 @@ export async function generateInvoicePdf(data: InvoiceData): Promise<Uint8Array>
   const dateStr = `${String(gd.getDate()).padStart(2, '0')}. ${String(gd.getMonth() + 1).padStart(2, '0')}. ${gd.getFullYear()}. ${String(gd.getHours()).padStart(2, '0')}:${String(gd.getMinutes()).padStart(2, '0')}`;
 
   page.drawText(`Datum / Date: ${dateStr}`, {
-    x: pad, y: footerH - 16, size: 9, font: f6, color: C.mid,
+    x: pad, y: footerH - 16, size: 9, font: fB, color: C.mid,
   });
   page.drawText(
     'PDV nije uracunat u cijenu temeljem cl. 90, st. 2 Zakona o PDV-u /',
-    { x: pad, y: footerH - 30, size: 7, font: f4, color: C.slateL }
+    { x: pad, y: footerH - 30, size: 7, font: fR, color: C.slateL }
   );
   page.drawText(
     'VAT is not included in the price according to Art. 90, paragraph 2 of the VAT Law',
-    { x: pad, y: footerH - 40, size: 7, font: f4, color: C.slateL }
+    { x: pad, y: footerH - 40, size: 7, font: fR, color: C.slateL }
   );
   page.drawText(
     'Turisticka pristojba ukljucena je u cijenu / Tourist tax included in the price of service',
-    { x: pad, y: footerH - 52, size: 7, font: f4, color: C.slateL }
+    { x: pad, y: footerH - 52, size: 7, font: fR, color: C.slateL }
   );
 
   // ── Header band ──────────────────────────────────────────────────────────────
@@ -111,23 +107,23 @@ export async function generateInvoicePdf(data: InvoiceData): Promise<Uint8Array>
   const headerY = height - headerH;
   page.drawRectangle({ x: 0, y: headerY, width, height: headerH, color: C.navy });
 
-  page.drawText(data.apartmentName, {
-    x: pad, y: headerY + 46, size: 14, font: f7, color: C.white,
+  page.drawText(tr(data.apartmentName), {
+    x: pad, y: headerY + 46, size: 14, font: fB, color: C.white,
   });
   page.drawText('Iznajmljivanje apartmana', {
-    x: pad, y: headerY + 30, size: 8, font: f4, color: C.blueL,
+    x: pad, y: headerY + 30, size: 8, font: fR, color: C.blueL,
   });
 
   const lblText = 'RACUN / INVOICE';
-  const lblW = f4.widthOfTextAtSize(lblText, 9);
+  const lblW = fR.widthOfTextAtSize(lblText, 9);
   page.drawText(lblText, {
-    x: width - pad - lblW, y: headerY + 54, size: 9, font: f4, color: C.blueL,
+    x: width - pad - lblW, y: headerY + 54, size: 9, font: fR, color: C.blueL,
   });
 
   const numText = `#${data.invoiceNumberDisplay}`;
-  const numW = f7.widthOfTextAtSize(numText, 20);
+  const numW = fB.widthOfTextAtSize(numText, 20);
   page.drawText(numText, {
-    x: width - pad - numW, y: headerY + 24, size: 20, font: f7, color: C.white,
+    x: width - pad - numW, y: headerY + 24, size: 20, font: fB, color: C.white,
   });
 
   // ── Two-column info section ───────────────────────────────────────────────────
@@ -135,29 +131,29 @@ export async function generateInvoicePdf(data: InvoiceData): Promise<Uint8Array>
   const colR = Math.floor(width / 2) + 10;
   let y = headerY - 28;
 
-  page.drawText('IZNAJMLJIVAC / OWNER', { x: colL, y, size: 7, font: f6, color: C.slateL });
-  page.drawText('GOST / GUEST',         { x: colR, y, size: 7, font: f6, color: C.slateL });
+  page.drawText('IZNAJMLJIVAC / OWNER', { x: colL, y, size: 7, font: fB, color: C.slateL });
+  page.drawText('GOST / GUEST',         { x: colR, y, size: 7, font: fB, color: C.slateL });
   y -= 16;
 
-  page.drawText(data.ownerName, { x: colL, y, size: 11, font: f7, color: C.text });
-  page.drawText(data.guestName, { x: colR, y, size: 11, font: f7, color: C.text });
+  page.drawText(tr(data.ownerName), { x: colL, y, size: 11, font: fB, color: C.text });
+  page.drawText(tr(data.guestName), { x: colR, y, size: 11, font: fB, color: C.text });
   y -= 14;
 
   const row = (
-    left: string | null, lf: typeof f4,
-    right: string | null, rf: typeof f4,
+    left: string | null, lf: typeof fR,
+    right: string | null, rf: typeof fR,
     sz = 9,
   ) => {
-    if (left)  page.drawText(left,  { x: colL, y, size: sz, font: lf, color: C.mid });
-    if (right) page.drawText(right, { x: colR, y, size: sz, font: rf, color: C.mid });
+    if (left)  page.drawText(tr(left),  { x: colL, y, size: sz, font: lf, color: C.mid });
+    if (right) page.drawText(tr(right), { x: colR, y, size: sz, font: rf, color: C.mid });
     y -= 12;
   };
 
-  row(`OIB / PIN: ${data.ownerOib}`,               f4, data.numGuests > 1 ? `${data.numGuests} gosta` : null, f4);
-  row(data.ownerAddress,                            f4, 'Vrijeme boravka / Time of stay:',       f6);
-  row(`${data.ownerPostalCode} ${data.ownerCity}`,  f4, `${fmtDate(data.checkIn)} - ${fmtDate(data.checkOut)}`, f4);
-  row(data.ownerCountry,                            f4, 'Nacin placanja / Payment type:',         f6);
-  row(null, f4, data.paymentType ? (PAYMENT_LABELS[data.paymentType] ?? data.paymentType) : '-', f4);
+  row(`OIB / PIN: ${data.ownerOib}`,               fR, data.numGuests > 1 ? `${data.numGuests} gosta` : null, fR);
+  row(data.ownerAddress,                            fR, 'Vrijeme boravka / Time of stay:',       fB);
+  row(`${data.ownerPostalCode} ${data.ownerCity}`,  fR, `${fmtDate(data.checkIn)} - ${fmtDate(data.checkOut)}`, fR);
+  row(data.ownerCountry,                            fR, 'Nacin placanja / Payment type:',         fB);
+  row(null, fR, data.paymentType ? (PAYMENT_LABELS[data.paymentType] ?? data.paymentType) : '-', fR);
 
   y -= 12;
 
@@ -178,13 +174,13 @@ export async function generateInvoicePdf(data: InvoiceData): Promise<Uint8Array>
   const cR = width - pad - 10;
   const thY = y - thH + 10;
 
-  page.drawText('Usluga / Service', { x: c1, y: thY, size: 8, font: f7, color: C.white });
-  page.drawText('Jedinica / Unit',  { x: c2, y: thY, size: 8, font: f7, color: C.white });
-  page.drawText('Kol.',             { x: c3, y: thY, size: 8, font: f7, color: C.white });
-  page.drawText('Cijena / Price',   { x: c4, y: thY, size: 8, font: f7, color: C.white });
+  page.drawText('Usluga / Service', { x: c1, y: thY, size: 8, font: fB, color: C.white });
+  page.drawText('Jedinica / Unit',  { x: c2, y: thY, size: 8, font: fB, color: C.white });
+  page.drawText('Kol.',             { x: c3, y: thY, size: 8, font: fB, color: C.white });
+  page.drawText('Cijena / Price',   { x: c4, y: thY, size: 8, font: fB, color: C.white });
   const totHdr = 'Ukupno / Total';
   page.drawText(totHdr, {
-    x: cR - f7.widthOfTextAtSize(totHdr, 8), y: thY, size: 8, font: f7, color: C.white,
+    x: cR - fB.widthOfTextAtSize(totHdr, 8), y: thY, size: 8, font: fB, color: C.white,
   });
   y -= thH;
 
@@ -194,18 +190,18 @@ export async function generateInvoicePdf(data: InvoiceData): Promise<Uint8Array>
   const rY1 = y - 14;
   const rY2 = y - 25;
 
-  page.drawText('Nocenje',         { x: c1, y: rY1, size: 9,   font: f7, color: C.text });
-  page.drawText('/ Accommodation', { x: c1, y: rY2, size: 7.5, font: f4, color: C.slate });
+  page.drawText('Nocenje',         { x: c1, y: rY1, size: 9,   font: fB, color: C.text });
+  page.drawText('/ Accommodation', { x: c1, y: rY2, size: 7.5, font: fR, color: C.slate });
 
-  const aptDisp = data.apartmentName.length > 18
-    ? data.apartmentName.slice(0, 16) + '...' : data.apartmentName;
-  page.drawText(aptDisp,               { x: c2, y: rY1, size: 9, font: f4, color: C.mid });
-  page.drawText(String(data.numNights),{ x: c3, y: rY1, size: 9, font: f4, color: C.mid });
-  page.drawText(pricePN != null ? fmtMoney(pricePN) : '-', { x: c4, y: rY1, size: 9, font: f4, color: C.mid });
+  const aptDisp = tr(data.apartmentName.length > 18
+    ? data.apartmentName.slice(0, 16) + '...' : data.apartmentName);
+  page.drawText(aptDisp,               { x: c2, y: rY1, size: 9, font: fR, color: C.mid });
+  page.drawText(String(data.numNights),{ x: c3, y: rY1, size: 9, font: fR, color: C.mid });
+  page.drawText(pricePN != null ? fmtMoney(pricePN) : '-', { x: c4, y: rY1, size: 9, font: fR, color: C.mid });
 
   const totStr = fmtMoney(data.amountGross);
   page.drawText(totStr, {
-    x: cR - f7.widthOfTextAtSize(totStr, 9), y: rY1, size: 9, font: f7, color: C.text,
+    x: cR - fB.widthOfTextAtSize(totStr, 9), y: rY1, size: 9, font: fB, color: C.text,
   });
 
   y -= 36;
@@ -219,9 +215,9 @@ export async function generateInvoicePdf(data: InvoiceData): Promise<Uint8Array>
   const sumX = width - pad - 200;
 
   const sumV = fmtMoney(data.amountGross);
-  page.drawText('Ukupna cijena / Total price', { x: sumX, y, size: 9, font: f4, color: C.slate });
+  page.drawText('Ukupna cijena / Total price', { x: sumX, y, size: 9, font: fR, color: C.slate });
   page.drawText(sumV, {
-    x: width - pad - f4.widthOfTextAtSize(sumV, 9), y, size: 9, font: f4, color: C.mid,
+    x: width - pad - fR.widthOfTextAtSize(sumV, 9), y, size: 9, font: fR, color: C.mid,
   });
   y -= 14;
 
@@ -232,10 +228,10 @@ export async function generateInvoicePdf(data: InvoiceData): Promise<Uint8Array>
     x: sumX - 14, y: y - 8, width: width - pad - (sumX - 14), height: 28, color: C.bg,
   });
 
-  page.drawText('Ukupno / Total', { x: sumX, y: y + 2, size: 11, font: f7, color: C.navy });
+  page.drawText('Ukupno / Total', { x: sumX, y: y + 2, size: 11, font: fB, color: C.navy });
   const grand = fmtMoney(data.amountGross);
   page.drawText(grand, {
-    x: width - pad - f7.widthOfTextAtSize(grand, 11), y: y + 2, size: 11, font: f7, color: C.blue,
+    x: width - pad - fB.widthOfTextAtSize(grand, 11), y: y + 2, size: 11, font: fB, color: C.blue,
   });
 
   return pdfDoc.save();
