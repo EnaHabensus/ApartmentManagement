@@ -69,7 +69,7 @@ const icons: Record<string, string> = {
   <nav class="flex-1 overflow-y-auto px-3 py-3 space-y-0.5">
     {nav.map(({ href, label, icon }) => (
       <a href={href} class={isActive(href) ? 'sidebar-link-active' : 'sidebar-link'}>
-        <span class="shrink-0" set:html={icons[icon] ?? ''} />
+        <span class="shrink-0 [&>svg]:w-5 [&>svg]:h-5 md:[&>svg]:w-4 md:[&>svg]:h-4" set:html={icons[icon] ?? ''} />
         <span>{label}</span>
       </a>
     ))}

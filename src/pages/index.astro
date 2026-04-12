@@ -242,20 +242,22 @@ function nights(ci: string, co: string) {
     </div>
 
     <!-- KPI kartice -->
-    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 md:gap-4 mb-6 md:mb-8">
-      {[
-        { label: 'Bruto zarada', value: `€ ${bruttoSum.toFixed(2)}` },
-        { label: 'Neto zarada', value: `€ ${nettoSum.toFixed(2)}` },
-        { label: 'Provizija', value: `€ ${commissionSum.toFixed(2)}` },
-        { label: 'Popunjenost', value: `${occupancy}%` },
-        { label: 'Ukupno rezervacija', value: String(activeRez.length) },
-        { label: 'Završene smjene', value: String(completedCount) },
-      ].map(({ label, value }) => (
-        <div class="card p-3 md:p-4">
-          <p class="text-xs font-medium text-gray-500 mb-1 leading-tight">{label}</p>
-          <p class="text-lg md:text-xl font-bold text-gray-900 truncate">{value}</p>
-        </div>
-      ))}
+    <div class="-mx-4 px-4 md:mx-0 md:px-0 mb-6 md:mb-8">
+      <div class="flex overflow-x-auto gap-3 pb-1 snap-x snap-mandatory md:grid md:grid-cols-3 lg:grid-cols-6 md:gap-4 md:overflow-visible md:pb-0">
+        {[
+          { label: 'Bruto zarada', value: `€ ${bruttoSum.toFixed(2)}` },
+          { label: 'Neto zarada', value: `€ ${nettoSum.toFixed(2)}` },
+          { label: 'Provizija', value: `€ ${commissionSum.toFixed(2)}` },
+          { label: 'Popunjenost', value: `${occupancy}%` },
+          { label: 'Ukupno rezervacija', value: String(activeRez.length) },
+          { label: 'Završene smjene', value: String(completedCount) },
+        ].map(({ label, value }) => (
+          <div class="card p-3 md:p-4 flex-shrink-0 w-36 md:w-auto snap-start">
+            <p class="text-xs font-medium text-gray-500 mb-1 leading-tight">{label}</p>
+            <p class="text-lg md:text-xl font-bold text-gray-900 truncate">{value}</p>
+          </div>
+        ))}
+      </div>
     </div>
 
     <!-- Check-out i Check-in danas -->
