@@ -199,22 +199,22 @@ function nights(ci: string, co: string) {
 ---
 
 <AppLayout title="Dashboard" user={profile} isAdmin={true} activeRoute="/">
-  <div class="p-6 max-w-7xl mx-auto">
+  <div class="p-4 md:p-6 max-w-7xl mx-auto">
     <!-- Header -->
-    <div class="flex flex-wrap items-center justify-between gap-4 mb-6">
+    <div class="flex flex-wrap items-start justify-between gap-3 mb-6">
       <div>
-        <h1 class="text-2xl font-bold text-gray-900">Dashboard</h1>
-        <p class="text-gray-500 text-sm mt-1">Pregled poslovanja</p>
+        <h1 class="text-xl md:text-2xl font-bold text-gray-900">Dashboard</h1>
+        <p class="text-gray-500 text-sm mt-0.5">Pregled poslovanja</p>
       </div>
 
-      <div class="flex items-center gap-3">
+      <div class="flex flex-wrap items-center gap-2">
         <!-- Filter apartmana -->
         {apartments.length > 1 && (
           <form method="GET" id="form-apt">
             <select
               name="apartment"
               onchange="document.getElementById('form-apt').submit()"
-              class="input w-auto"
+              class="input text-sm w-auto"
             >
               <option value="all" selected={aptFilter === 'all'}>Svi apartmani</option>
               {apartments.map((a) => (
@@ -230,7 +230,7 @@ function nights(ci: string, co: string) {
           <select
             name="period"
             onchange="document.getElementById('form-period').submit()"
-            class="input w-auto"
+            class="input text-sm w-auto"
           >
             <option value="all" selected={period === 'all'}>Od početka</option>
             <option value="this_month" selected={period === 'this_month'}>Ovaj mjesec</option>
@@ -242,171 +242,251 @@ function nights(ci: string, co: string) {
     </div>
 
     <!-- KPI kartice -->
-    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
-      {[
-        { label: 'Bruto zarada', value: `€ ${bruttoSum.toFixed(2)}` },
-        { label: 'Neto zarada', value: `€ ${nettoSum.toFixed(2)}` },
-        { label: 'Provizija', value: `€ ${commissionSum.toFixed(2)}` },
-        { label: 'Popunjenost', value: `${occupancy}%` },
-        { label: 'Ukupno rezervacija', value: String(activeRez.length) },
-        { label: 'Završene smjene', value: String(completedCount) },
-      ].map(({ label, value }) => (
-        <div class="card p-4">
-          <p class="text-xs font-medium text-gray-500 mb-1">{label}</p>
-          <p class="text-xl font-bold text-gray-900">{value}</p>
-        </div>
-      ))}
+    <div class="-mx-4 px-4 md:mx-0 md:px-0 mb-6 md:mb-8">
+      <div class="flex overflow-x-auto gap-3 pb-1 snap-x snap-mandatory md:grid md:grid-cols-3 lg:grid-cols-6 md:gap-4 md:overflow-visible md:pb-0">
+        {[
+          { label: 'Bruto zarada', value: `€ ${bruttoSum.toFixed(2)}` },
+          { label: 'Neto zarada', value: `€ ${nettoSum.toFixed(2)}` },
+          { label: 'Provizija', value: `€ ${commissionSum.toFixed(2)}` },
+          { label: 'Popunjenost', value: `${occupancy}%` },
+          { label: 'Ukupno rezervacija', value: String(activeRez.length) },
+          { label: 'Završene smjene', value: String(completedCount) },
+        ].map(({ label, value }) => (
+          <div class="card px-4 py-5 md:p-4 flex-shrink-0 w-44 md:w-auto snap-start">
+            <p class="text-xs font-medium text-gray-500 mb-1.5 leading-tight">{label}</p>
+            <p class="text-2xl md:text-xl font-bold text-gray-900 truncate">{value}</p>
+          </div>
+        ))}
+      </div>
     </div>
 
     <!-- Check-out i Check-in danas -->
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6 mt-4 md:mt-6">
 
       <!-- Check-out danas -->
       <div class="card">
-        <div class="px-5 py-4 border-b border-gray-100">
+        <div class="px-4 md:px-5 py-3 md:py-4 border-b border-gray-100">
           <h2 class="font-semibold text-gray-900">Check-out danas</h2>
           <p class="text-xs text-gray-400 mt-0.5">{formatDate(todayStr)}</p>
         </div>
         {!checkoutsToday?.length ? (
           <div class="p-8 text-center text-gray-400 text-sm">Nema check-outova danas.</div>
         ) : (
-          <div class="overflow-x-auto">
-            <table class="w-full text-sm">
-              <thead>
-                <tr>
-                  <th class="table-head px-4 py-3 text-left">Gost</th>
-                  <th class="table-head px-4 py-3 text-left">Apartman</th>
-                  <th class="table-head px-4 py-3 text-center">Noćenja</th>
-                  <th class="table-head px-4 py-3 text-left">Čišćenje</th>
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-gray-100">
-                {checkoutsToday.map((r) => {
-                  const cleaner = cleaningMap.get(r.id);
-                  const aptUsers = aptUsersForCleaningMap[r.apartment_id] ?? [];
-                  const aptColor = aptColorMap.get(r.apartment_id) ?? '#3B82F6';
-                  const aptName  = aptNameMap.get(r.apartment_id) ?? '—';
-                  return (
-                    <tr class="table-row">
-                      <td class="table-cell font-medium text-gray-900">{r.guest_name}</td>
-                      <td class="table-cell">
-                        <span class="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium whitespace-nowrap"
-                          style={`background-color:${aptColor}20;color:${aptColor};box-shadow:inset 0 0 0 1px ${aptColor}40`}>
-                          {aptName}
-                        </span>
-                      </td>
-                      <td class="table-cell text-center text-gray-700 font-medium">{nights(r.check_in, r.check_out)}</td>
-                      <td class="table-cell">
-                        <div class="flex flex-col gap-1">
-                          {aptUsers.length > 0 && (
-                            <select
-                              class="input py-1 text-xs w-40"
-                              onchange={`assignCleaning('${r.id}', '${r.check_out}', this.value)`}
-                            >
-                              <option value="">— Odaberi —</option>
-                              {aptUsers.map((u) => (
-                                <option value={u.user_id} selected={cleaner?.user_id === u.user_id}>
-                                  {u.full_name}
-                                </option>
-                              ))}
-                            </select>
-                          )}
-                          {cleaner && (
-                            <span class="inline-flex items-center rounded-md bg-purple-50 px-2 py-0.5 text-xs font-medium text-purple-700 ring-1 ring-inset ring-purple-700/10 w-fit">
-                              {cleaner.full_name}
-                            </span>
-                          )}
-                          {aptUsers.length === 0 && <span class="text-gray-400 text-xs">—</span>}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          <>
+            {/* Mobile card layout */}
+            <div class="md:hidden divide-y divide-gray-100">
+              {checkoutsToday.map((r) => {
+                const cleaner = cleaningMap.get(r.id);
+                const aptUsers = aptUsersForCleaningMap[r.apartment_id] ?? [];
+                const aptColor = aptColorMap.get(r.apartment_id) ?? '#3B82F6';
+                const aptName  = aptNameMap.get(r.apartment_id) ?? '—';
+                return (
+                  <div class="px-4 py-3">
+                    <div class="flex items-center justify-between gap-2 mb-1.5">
+                      <span class="font-medium text-gray-900 text-sm truncate">{r.guest_name}</span>
+                      <span class="text-xs text-gray-500 flex-shrink-0">{nights(r.check_in, r.check_out)} noć.</span>
+                    </div>
+                    <div class="flex items-center gap-2 flex-wrap">
+                      <span class="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium whitespace-nowrap"
+                        style={`background-color:${aptColor}20;color:${aptColor};box-shadow:inset 0 0 0 1px ${aptColor}40`}>
+                        {aptName}
+                      </span>
+                      {aptUsers.length > 0 && (
+                        <select
+                          class="input py-1 text-xs flex-1 min-w-0"
+                          onchange={`assignCleaning('${r.id}', '${r.check_out}', this.value)`}
+                        >
+                          <option value="">— Čišćenje —</option>
+                          {aptUsers.map((u) => (
+                            <option value={u.user_id} selected={cleaner?.user_id === u.user_id}>
+                              {u.full_name}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            {/* Desktop table */}
+            <div class="hidden md:block overflow-x-auto">
+              <table class="w-full text-sm">
+                <thead>
+                  <tr>
+                    <th class="table-head px-4 py-3 text-left">Gost</th>
+                    <th class="table-head px-4 py-3 text-left">Apartman</th>
+                    <th class="table-head px-4 py-3 text-center">Noćenja</th>
+                    <th class="table-head px-4 py-3 text-left">Čišćenje</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100">
+                  {checkoutsToday.map((r) => {
+                    const cleaner = cleaningMap.get(r.id);
+                    const aptUsers = aptUsersForCleaningMap[r.apartment_id] ?? [];
+                    const aptColor = aptColorMap.get(r.apartment_id) ?? '#3B82F6';
+                    const aptName  = aptNameMap.get(r.apartment_id) ?? '—';
+                    return (
+                      <tr class="table-row">
+                        <td class="table-cell font-medium text-gray-900">{r.guest_name}</td>
+                        <td class="table-cell">
+                          <span class="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium whitespace-nowrap"
+                            style={`background-color:${aptColor}20;color:${aptColor};box-shadow:inset 0 0 0 1px ${aptColor}40`}>
+                            {aptName}
+                          </span>
+                        </td>
+                        <td class="table-cell text-center text-gray-700 font-medium">{nights(r.check_in, r.check_out)}</td>
+                        <td class="table-cell">
+                          <div class="flex flex-col gap-1">
+                            {aptUsers.length > 0 && (
+                              <select
+                                class="input py-1 text-xs w-40"
+                                onchange={`assignCleaning('${r.id}', '${r.check_out}', this.value)`}
+                              >
+                                <option value="">— Odaberi —</option>
+                                {aptUsers.map((u) => (
+                                  <option value={u.user_id} selected={cleaner?.user_id === u.user_id}>
+                                    {u.full_name}
+                                  </option>
+                                ))}
+                              </select>
+                            )}
+                            {cleaner && (
+                              <span class="inline-flex items-center rounded-md bg-purple-50 px-2 py-0.5 text-xs font-medium text-purple-700 ring-1 ring-inset ring-purple-700/10 w-fit">
+                                {cleaner.full_name}
+                              </span>
+                            )}
+                            {aptUsers.length === 0 && <span class="text-gray-400 text-xs">—</span>}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </div>
 
       <!-- Check-in danas -->
       <div class="card">
-        <div class="px-5 py-4 border-b border-gray-100">
+        <div class="px-4 md:px-5 py-3 md:py-4 border-b border-gray-100">
           <h2 class="font-semibold text-gray-900">Check-in danas</h2>
           <p class="text-xs text-gray-400 mt-0.5">{formatDate(todayStr)}</p>
         </div>
         {!checkinsToday?.length ? (
           <div class="p-8 text-center text-gray-400 text-sm">Nema check-inova danas.</div>
         ) : (
-          <div class="overflow-x-auto">
-            <table class="w-full text-sm">
-              <thead>
-                <tr>
-                  <th class="table-head px-4 py-3 text-left">Gost</th>
-                  <th class="table-head px-4 py-3 text-left">Apartman</th>
-                  <th class="table-head px-4 py-3 text-center">Noćenja</th>
-                  <th class="table-head px-4 py-3 text-left">Čišćenje</th>
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-gray-100">
-                {checkinsToday.map((r) => {
-                  const cleaner = cleaningMap.get(r.id);
-                  const aptUsers = aptUsersForCleaningMap[r.apartment_id] ?? [];
-                  const aptColor = aptColorMap.get(r.apartment_id) ?? '#3B82F6';
-                  const aptName  = aptNameMap.get(r.apartment_id) ?? '—';
-                  return (
-                    <tr class="table-row">
-                      <td class="table-cell font-medium text-gray-900">{r.guest_name}</td>
-                      <td class="table-cell">
-                        <span class="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium whitespace-nowrap"
-                          style={`background-color:${aptColor}20;color:${aptColor};box-shadow:inset 0 0 0 1px ${aptColor}40`}>
-                          {aptName}
-                        </span>
-                      </td>
-                      <td class="table-cell text-center text-gray-700 font-medium">{nights(r.check_in, r.check_out)}</td>
-                      <td class="table-cell">
-                        <div class="flex flex-col gap-1">
-                          {aptUsers.length > 0 && (
-                            <select
-                              class="input py-1 text-xs w-40"
-                              onchange={`assignCleaning('${r.id}', '${r.check_out}', this.value)`}
-                            >
-                              <option value="">— Odaberi —</option>
-                              {aptUsers.map((u) => (
-                                <option value={u.user_id} selected={cleaner?.user_id === u.user_id}>
-                                  {u.full_name}
-                                </option>
-                              ))}
-                            </select>
-                          )}
-                          {cleaner && (
-                            <span class="inline-flex items-center rounded-md bg-purple-50 px-2 py-0.5 text-xs font-medium text-purple-700 ring-1 ring-inset ring-purple-700/10 w-fit">
-                              {cleaner.full_name}
-                            </span>
-                          )}
-                          {aptUsers.length === 0 && <span class="text-gray-400 text-xs">—</span>}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          <>
+            {/* Mobile card layout */}
+            <div class="md:hidden divide-y divide-gray-100">
+              {checkinsToday.map((r) => {
+                const cleaner = cleaningMap.get(r.id);
+                const aptUsers = aptUsersForCleaningMap[r.apartment_id] ?? [];
+                const aptColor = aptColorMap.get(r.apartment_id) ?? '#3B82F6';
+                const aptName  = aptNameMap.get(r.apartment_id) ?? '—';
+                return (
+                  <div class="px-4 py-3">
+                    <div class="flex items-center justify-between gap-2 mb-1.5">
+                      <span class="font-medium text-gray-900 text-sm truncate">{r.guest_name}</span>
+                      <span class="text-xs text-gray-500 flex-shrink-0">{nights(r.check_in, r.check_out)} noć.</span>
+                    </div>
+                    <div class="flex items-center gap-2 flex-wrap">
+                      <span class="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium whitespace-nowrap"
+                        style={`background-color:${aptColor}20;color:${aptColor};box-shadow:inset 0 0 0 1px ${aptColor}40`}>
+                        {aptName}
+                      </span>
+                      {aptUsers.length > 0 && (
+                        <select
+                          class="input py-1 text-xs flex-1 min-w-0"
+                          onchange={`assignCleaning('${r.id}', '${r.check_out}', this.value)`}
+                        >
+                          <option value="">— Čišćenje —</option>
+                          {aptUsers.map((u) => (
+                            <option value={u.user_id} selected={cleaner?.user_id === u.user_id}>
+                              {u.full_name}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            {/* Desktop table */}
+            <div class="hidden md:block overflow-x-auto">
+              <table class="w-full text-sm">
+                <thead>
+                  <tr>
+                    <th class="table-head px-4 py-3 text-left">Gost</th>
+                    <th class="table-head px-4 py-3 text-left">Apartman</th>
+                    <th class="table-head px-4 py-3 text-center">Noćenja</th>
+                    <th class="table-head px-4 py-3 text-left">Čišćenje</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100">
+                  {checkinsToday.map((r) => {
+                    const cleaner = cleaningMap.get(r.id);
+                    const aptUsers = aptUsersForCleaningMap[r.apartment_id] ?? [];
+                    const aptColor = aptColorMap.get(r.apartment_id) ?? '#3B82F6';
+                    const aptName  = aptNameMap.get(r.apartment_id) ?? '—';
+                    return (
+                      <tr class="table-row">
+                        <td class="table-cell font-medium text-gray-900">{r.guest_name}</td>
+                        <td class="table-cell">
+                          <span class="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium whitespace-nowrap"
+                            style={`background-color:${aptColor}20;color:${aptColor};box-shadow:inset 0 0 0 1px ${aptColor}40`}>
+                            {aptName}
+                          </span>
+                        </td>
+                        <td class="table-cell text-center text-gray-700 font-medium">{nights(r.check_in, r.check_out)}</td>
+                        <td class="table-cell">
+                          <div class="flex flex-col gap-1">
+                            {aptUsers.length > 0 && (
+                              <select
+                                class="input py-1 text-xs w-40"
+                                onchange={`assignCleaning('${r.id}', '${r.check_out}', this.value)`}
+                              >
+                                <option value="">— Odaberi —</option>
+                                {aptUsers.map((u) => (
+                                  <option value={u.user_id} selected={cleaner?.user_id === u.user_id}>
+                                    {u.full_name}
+                                  </option>
+                                ))}
+                              </select>
+                            )}
+                            {cleaner && (
+                              <span class="inline-flex items-center rounded-md bg-purple-50 px-2 py-0.5 text-xs font-medium text-purple-700 ring-1 ring-inset ring-purple-700/10 w-fit">
+                                {cleaner.full_name}
+                              </span>
+                            )}
+                            {aptUsers.length === 0 && <span class="text-gray-400 text-xs">—</span>}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </div>
 
     </div>{/* end grid check-in/out */}
 
     <!-- Grafovi: Prihodi i Čišćenje -->
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6 mt-4 md:mt-6">
 
       <!-- Graf: Prihodi po načinu plaćanja -->
       <div class="card">
-        <div class="px-5 py-4 border-b border-gray-100">
+        <div class="px-4 md:px-5 py-3 md:py-4 border-b border-gray-100">
           <h2 class="font-semibold text-gray-900">Prihodi po načinu plaćanja</h2>
           <p class="text-xs text-gray-400 mt-0.5">Raspodjela bruto prihoda</p>
         </div>
-        <div class="p-5">
+        <div class="p-4 md:p-5">
           {prihodiValues.length === 0 ? (
             <div class="flex items-center justify-center h-48 text-gray-400 text-sm">Nema podataka za odabrani period.</div>
           ) : (
@@ -424,11 +504,11 @@ function nights(ci: string, co: string) {
 
       <!-- Graf: Čišćenja po osobi -->
       <div class="card">
-        <div class="px-5 py-4 border-b border-gray-100">
+        <div class="px-4 md:px-5 py-3 md:py-4 border-b border-gray-100">
           <h2 class="font-semibold text-gray-900">Čišćenja po osobi</h2>
           <p class="text-xs text-gray-400 mt-0.5">Ukupan broj dodijeljenih čišćenja</p>
         </div>
-        <div class="p-5">
+        <div class="p-4 md:p-5">
           {cleaningValues.length === 0 ? (
             <div class="flex items-center justify-center h-48 text-gray-400 text-sm">Nema podataka o čišćenjima.</div>
           ) : (
