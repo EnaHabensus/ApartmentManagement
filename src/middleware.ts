@@ -15,15 +15,19 @@ export const onRequest = defineMiddleware(async (context, next) => {
   const { request, cookies, redirect, url } = context;
   const pathname = url.pathname;
 
-  // API rute za auth nisu zaštićene
-  if (pathname.startsWith('/api/auth/') || pathname.startsWith('/api/invite/')) {
+  // API rute za auth i token completion nisu zaštićene
+  if (
+    pathname.startsWith('/api/auth/') ||
+    pathname.startsWith('/api/invite/') ||
+    pathname.startsWith('/api/zadatci/complete-token')
+  ) {
     return next();
   }
 
   // Provjeri je li javna ruta
   const isPublic = PUBLIC_ROUTES.some(
     (route) => pathname === route || pathname.startsWith(route + '/')
-  );
+  ) || pathname === '/task-complete';
 
   const supabase = createSupabaseServerClient(request, cookies);
   const { data: { user } } = await supabase.auth.getUser();
