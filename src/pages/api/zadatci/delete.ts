@@ -13,7 +13,6 @@ export const POST: APIRoute = async ({ request, cookies, redirect }) => {
 
   const adminSupabase = createSupabaseAdminClient();
 
-  // Dohvati zadatak (title, due_date, due_time, apartment_id)
   const { data: task } = await adminSupabase
     .from('tasks')
     .select('apartment_id, title, due_date, due_time')
@@ -22,7 +21,6 @@ export const POST: APIRoute = async ({ request, cookies, redirect }) => {
 
   if (!task) return redirect('/zadatci?error=' + encodeURIComponent('Zadatak nije pronađen.'));
 
-  // Provjeri admin ulogu
   const { data: roleRow } = await adminSupabase
     .from('apartment_users')
     .select('role')
@@ -34,34 +32,49 @@ export const POST: APIRoute = async ({ request, cookies, redirect }) => {
     return redirect('/zadatci?error=Nemate+prava+za+brisanje+zadatka.');
   }
 
-  // Dohvati assigneeje i podatke potrebne za email PRIJE brisanja
+  // Dohvati assignee-je (i regularne i vanjske) PRIJE brisanja
   const [{ data: assigneeRows }, { data: apt }] = await Promise.all([
-    adminSupabase.from('task_assignees').select('user_id').eq('task_id', id),
+    adminSupabase.from('task_assignees').select('user_id, external_member_id').eq('task_id', id),
     adminSupabase.from('apartments').select('name').eq('id', task.apartment_id).single(),
   ]);
 
-  const assigneeIds = (assigneeRows ?? []).map((r) => r.user_id);
-  const { data: assigneeProfiles } = assigneeIds.length > 0
-    ? await adminSupabase.from('profiles').select('id, full_name, email').in('id', assigneeIds)
-    : { data: [] };
+  const userIds = (assigneeRows ?? []).filter((r: any) => r.user_id).map((r: any) => r.user_id as string);
+  const extIds = (assigneeRows ?? []).filter((r: any) => r.external_member_id).map((r: any) => r.external_member_id as string);
 
-  // Briši assignee-je pa zadatak
+  const [{ data: userProfiles }, { data: extMembers }] = await Promise.all([
+    userIds.length > 0
+      ? adminSupabase.from('profiles').select('id, full_name, email').in('id', userIds)
+      : Promise.resolve({ data: [] }),
+    extIds.length > 0
+      ? adminSupabase.from('external_members').select('id, name, email').in('id', extIds)
+      : Promise.resolve({ data: [] }),
+  ]);
+
+  // Briši
   await adminSupabase.from('task_assignees').delete().eq('task_id', id);
   await adminSupabase.from('tasks').delete().eq('id', id);
 
-  // Pošalji email assigneejima da je zadatak otkazan (fire-and-forget)
-  if (apt && assigneeProfiles && assigneeProfiles.length > 0) {
+  // Pošalji email notifikacije
+  if (apt) {
     const dueDate = task.due_date.split('-').reverse().join('.');
-    for (const profile of assigneeProfiles) {
-      sendTaskCancelledEmail({
-        to: profile.email,
-        assigneeName: profile.full_name,
-        apartmentName: apt.name,
-        taskTitle: task.title,
-        dueDate,
-        dueTime: task.due_time,
-      }).catch(() => {});
+    const emailPromises: Promise<any>[] = [];
+
+    for (const p of userProfiles ?? []) {
+      emailPromises.push(sendTaskCancelledEmail({
+        to: p.email, assigneeName: p.full_name,
+        apartmentName: apt.name, taskTitle: task.title,
+        dueDate, dueTime: task.due_time,
+      }).catch(() => {}));
     }
+    for (const em of extMembers ?? []) {
+      emailPromises.push(sendTaskCancelledEmail({
+        to: (em as any).email, assigneeName: (em as any).name,
+        apartmentName: apt.name, taskTitle: task.title,
+        dueDate, dueTime: task.due_time,
+      }).catch(() => {}));
+    }
+
+    await Promise.all(emailPromises);
   }
 
   return redirect('/zadatci?success=deleted');

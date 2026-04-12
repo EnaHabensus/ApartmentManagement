@@ -1,6 +1,6 @@
 import type { APIRoute } from 'astro';
 import { createSupabaseServerClient, createSupabaseAdminClient } from '../../../lib/supabase';
-import { sendTaskAssignedEmail, sendTaskCancelledEmail } from '../../../lib/resend';
+import { sendTaskAssignedEmail, sendTaskCancelledEmail, sendTaskAssignedExternalEmail, getAppUrl } from '../../../lib/resend';
 
 export const POST: APIRoute = async ({ request, cookies }) => {
   const json = (data: object, status = 200) =>
@@ -10,15 +10,14 @@ export const POST: APIRoute = async ({ request, cookies }) => {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return json({ error: 'Niste prijavljeni.' }, 401);
 
-  let body: { reservation_id?: string; user_ids?: string[]; check_out?: string };
+  let body: { reservation_id?: string; user_ids?: string[]; external_ids?: string[] };
   try { body = await request.json(); } catch { return json({ error: 'Invalid JSON.' }, 400); }
 
-  const { reservation_id, user_ids = [] } = body;
+  const { reservation_id, user_ids = [], external_ids = [] } = body;
   if (!reservation_id) return json({ error: 'reservation_id nedostaje.' }, 400);
 
   const adminSupabase = createSupabaseAdminClient();
 
-  // Dohvati rezervaciju
   const { data: reservation } = await adminSupabase
     .from('reservations')
     .select('apartment_id, check_out')
@@ -27,7 +26,6 @@ export const POST: APIRoute = async ({ request, cookies }) => {
 
   if (!reservation) return json({ error: 'Rezervacija nije pronađena.' }, 404);
 
-  // Provjeri da je korisnik admin apartmana
   const { data: roleRow } = await adminSupabase
     .from('apartment_users')
     .select('role')
@@ -37,7 +35,6 @@ export const POST: APIRoute = async ({ request, cookies }) => {
 
   if (!roleRow) return json({ error: 'Nemate pristup ovoj rezervaciji.' }, 403);
 
-  // Dohvati apartman (naziv + check_out_time za email i zadatak)
   const { data: apt } = await adminSupabase
     .from('apartments')
     .select('name, check_out_time')
@@ -50,11 +47,13 @@ export const POST: APIRoute = async ({ request, cookies }) => {
   // Zapamti stare čistače za email diff
   const { data: oldCleaningRows } = await adminSupabase
     .from('reservation_cleaning')
-    .select('user_id')
+    .select('user_id, external_member_id')
     .eq('reservation_id', reservation_id);
-  const oldIds = new Set((oldCleaningRows ?? []).map((r) => r.user_id));
 
-  // Obriši sve postojeće dodjele čišćenja i auto-zadatak za ovu rezervaciju
+  const oldUserIds = new Set((oldCleaningRows ?? []).filter((r: any) => r.user_id).map((r: any) => r.user_id as string));
+  const oldExtIds = new Set((oldCleaningRows ?? []).filter((r: any) => r.external_member_id).map((r: any) => r.external_member_id as string));
+
+  // Obriši sve postojeće dodjele i auto-zadatak
   const { data: existingTasks } = await adminSupabase
     .from('tasks')
     .select('id')
@@ -62,22 +61,23 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     .eq('source', 'cleaning_auto');
 
   if (existingTasks && existingTasks.length > 0) {
-    const taskIds = existingTasks.map((t) => t.id);
+    const taskIds = existingTasks.map((t: any) => t.id);
     await adminSupabase.from('task_assignees').delete().in('task_id', taskIds);
     await adminSupabase.from('tasks').delete().in('id', taskIds);
   }
 
   await adminSupabase.from('reservation_cleaning').delete().eq('reservation_id', reservation_id);
 
-  // Ako nema odabranih čistača, samo ukloni — gotovo
-  if (!user_ids || user_ids.length === 0) return json({ success: true });
+  if (user_ids.length === 0 && external_ids.length === 0) return json({ success: true });
 
-  // Kreiraj nove dodjele (jedna po čistaču)
-  await adminSupabase.from('reservation_cleaning').insert(
-    user_ids.map((uid) => ({ reservation_id, user_id: uid }))
-  );
+  // Kreiraj nove dodjele čišćenja
+  const cleaningInserts: any[] = [
+    ...user_ids.map((uid) => ({ reservation_id, user_id: uid })),
+    ...external_ids.map((eid) => ({ reservation_id, external_member_id: eid })),
+  ];
+  await adminSupabase.from('reservation_cleaning').insert(cleaningInserts);
 
-  // Kreiraj jedan zadatak čišćenja s više assigneeja
+  // Kreiraj jedan zadatak čišćenja
   const { data: task } = await adminSupabase
     .from('tasks')
     .insert({
@@ -94,52 +94,67 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     .single();
 
   if (task) {
-    await adminSupabase.from('task_assignees').insert(
-      user_ids.map((uid) => ({ task_id: task.id, user_id: uid }))
-    );
+    const assigneeInserts: any[] = [
+      ...user_ids.map((uid) => ({ task_id: task.id, user_id: uid })),
+      ...external_ids.map((eid) => ({ task_id: task.id, external_member_id: eid })),
+    ];
+    await adminSupabase.from('task_assignees').insert(assigneeInserts);
   }
 
-  // Email notifikacije — awaited prije returna (CF Workers terminira worker odmah po return)
-  const newIds = new Set(user_ids);
-  const addedIds   = user_ids.filter((uid) => !oldIds.has(uid));
-  const removedIds = [...oldIds].filter((uid) => !newIds.has(uid));
+  // Email diff
+  const newUserSet = new Set(user_ids);
+  const newExtSet = new Set(external_ids);
+  const addedUserIds = user_ids.filter((uid) => !oldUserIds.has(uid));
+  const removedUserIds = [...oldUserIds].filter((uid) => !newUserSet.has(uid));
+  const addedExtIds = external_ids.filter((eid) => !oldExtIds.has(eid));
+  const removedExtIds = [...oldExtIds].filter((eid) => !newExtSet.has(eid));
 
-  if (addedIds.length > 0 || removedIds.length > 0) {
-    const allAffectedIds = [...addedIds, ...removedIds];
-    const { data: profiles } = await adminSupabase
-      .from('profiles')
-      .select('id, full_name, email')
-      .in('id', allAffectedIds);
+  const dueDate = reservation.check_out.split('-').reverse().join('.');
+  const emailPromises: Promise<any>[] = [];
+  const appUrl = getAppUrl();
 
-    const profileMap = new Map((profiles ?? []).map((p) => [p.id, p]));
-    const dueDate = reservation.check_out.split('-').reverse().join('.');
+  // Regular users
+  const allChangedUserIds = [...addedUserIds, ...removedUserIds];
+  if (allChangedUserIds.length > 0) {
+    const { data: profiles } = await adminSupabase.from('profiles').select('id, full_name, email').in('id', allChangedUserIds);
+    const profileMap = new Map((profiles ?? []).map((p: any) => [p.id, p]));
 
-    const emailPromises: Promise<any>[] = [];
-
-    for (const uid of addedIds) {
+    for (const uid of addedUserIds) {
       const p = profileMap.get(uid);
-      if (p) emailPromises.push(
-        sendTaskAssignedEmail({
-          to: p.email, assigneeName: p.full_name,
-          apartmentName, taskTitle: 'Čišćenje',
-          dueDate, dueTime: checkOutTime,
-        }).catch(() => {})
-      );
+      if (p) emailPromises.push(sendTaskAssignedEmail({ to: p.email, assigneeName: p.full_name, apartmentName, taskTitle: 'Čišćenje', dueDate, dueTime: checkOutTime }).catch(() => {}));
     }
-
-    for (const uid of removedIds) {
+    for (const uid of removedUserIds) {
       const p = profileMap.get(uid);
-      if (p) emailPromises.push(
-        sendTaskCancelledEmail({
-          to: p.email, assigneeName: p.full_name,
-          apartmentName, taskTitle: 'Čišćenje',
-          dueDate, dueTime: checkOutTime,
-        }).catch(() => {})
-      );
+      if (p) emailPromises.push(sendTaskCancelledEmail({ to: p.email, assigneeName: p.full_name, apartmentName, taskTitle: 'Čišćenje', dueDate, dueTime: checkOutTime }).catch(() => {}));
     }
-
-    await Promise.all(emailPromises);
   }
+
+  // External members
+  if (addedExtIds.length > 0 && task) {
+    const { data: extMembers } = await adminSupabase.from('external_members').select('id, name, email').in('id', addedExtIds);
+    const { data: extRows } = await adminSupabase.from('task_assignees').select('external_member_id, completion_token').eq('task_id', task.id).not('external_member_id', 'is', null);
+    const tokenMap = new Map((extRows ?? []).map((r: any) => [r.external_member_id, r.completion_token]));
+
+    for (const em of extMembers ?? []) {
+      const token = tokenMap.get((em as any).id);
+      if (!token) continue;
+      emailPromises.push(sendTaskAssignedExternalEmail({
+        to: (em as any).email, name: (em as any).name,
+        apartmentName, taskTitle: 'Čišćenje',
+        dueDate, dueTime: checkOutTime,
+        completionUrl: `${appUrl}/api/zadatci/complete-token?token=${token}`,
+      }).catch(() => {}));
+    }
+  }
+
+  if (removedExtIds.length > 0) {
+    const { data: removedExt } = await adminSupabase.from('external_members').select('id, name, email').in('id', removedExtIds);
+    for (const em of removedExt ?? []) {
+      emailPromises.push(sendTaskCancelledEmail({ to: (em as any).email, assigneeName: (em as any).name, apartmentName, taskTitle: 'Čišćenje', dueDate, dueTime: checkOutTime }).catch(() => {}));
+    }
+  }
+
+  await Promise.all(emailPromises);
 
   return json({ success: true });
 };

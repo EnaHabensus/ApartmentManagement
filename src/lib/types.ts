@@ -110,9 +110,28 @@ export interface Task {
   updated_at: string;
 }
 
+export interface ExternalMember {
+  id: string;
+  name: string;
+  email: string;
+  created_by: string | null;
+  created_at: string;
+}
+
+export interface ApartmentExternalMember {
+  id: string;
+  apartment_id: string;
+  external_member_id: string;
+  created_at: string;
+}
+
 export interface TaskAssignee {
+  id: string;
   task_id: string;
-  user_id: string;
+  user_id: string | null;
+  external_member_id: string | null;
+  completion_token: string | null;
+  completed_at: string | null;
   assigned_at: string;
 }
 
@@ -148,8 +167,9 @@ export interface ReservationWithApartment extends Reservation {
 export interface TaskWithDetails extends Task {
   apartments: Pick<Apartment, 'name'>;
   task_assignees: Array<{
-    user_id: string;
-    profiles: Pick<Profile, 'full_name' | 'email'>;
+    user_id: string | null;
+    external_member_id: string | null;
+    profiles: { full_name: string; email: string };
   }>;
 }
 

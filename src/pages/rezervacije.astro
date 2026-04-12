@@ -97,20 +97,32 @@ const aptColorMap = new Map(allApartments.map((a) => [a.id, (a as any).color as 
 // Dohvati dodjele čišćenja za prikazane rezervacije
 const reservationIds = reservations.map((r) => r.id);
 const { data: cleaningRows } = reservationIds.length > 0
-  ? await adminSupabase.from('reservation_cleaning').select('reservation_id, user_id').in('reservation_id', reservationIds)
+  ? await adminSupabase.from('reservation_cleaning').select('reservation_id, user_id, external_member_id').in('reservation_id', reservationIds)
   : { data: [] };
 
-const cleaningUserIds = [...new Set((cleaningRows ?? []).map((c) => c.user_id))];
+const cleaningUserIds = [...new Set((cleaningRows ?? []).filter((c) => c.user_id).map((c) => c.user_id as string))];
 const { data: cleaningProfiles } = cleaningUserIds.length > 0
   ? await adminSupabase.from('profiles').select('id, full_name').in('id', cleaningUserIds)
   : { data: [] };
 const cleaningProfileMap = new Map((cleaningProfiles ?? []).map((p) => [p.id, p.full_name]));
-// reservation_id -> [{ user_id, full_name }]  (višestruki čistači)
-const cleaningMap = new Map<string, Array<{ user_id: string; full_name: string }>>();
+
+const cleaningExtIds = [...new Set((cleaningRows ?? []).filter((c) => c.external_member_id).map((c) => c.external_member_id as string))];
+const { data: cleaningExtMembers } = cleaningExtIds.length > 0
+  ? await adminSupabase.from('external_members').select('id, name').in('id', cleaningExtIds)
+  : { data: [] };
+const cleaningExtMap = new Map((cleaningExtMembers ?? []).map((em) => [em.id, em.name]));
+
+// reservation_id -> [{ id, type, full_name }] — regularne i vanjske osobe
+const cleaningMap = new Map<string, Array<{ id: string; type: 'user' | 'external'; full_name: string }>>();
 for (const c of (cleaningRows ?? [])) {
-  const name = cleaningProfileMap.get(c.user_id) ?? '?';
   if (!cleaningMap.has(c.reservation_id)) cleaningMap.set(c.reservation_id, []);
-  cleaningMap.get(c.reservation_id)!.push({ user_id: c.user_id, full_name: name });
+  if (c.user_id) {
+    const name = cleaningProfileMap.get(c.user_id) ?? '?';
+    cleaningMap.get(c.reservation_id)!.push({ id: c.user_id, type: 'user', full_name: name });
+  } else if (c.external_member_id) {
+    const name = cleaningExtMap.get(c.external_member_id) ?? '?';
+    cleaningMap.get(c.reservation_id)!.push({ id: c.external_member_id, type: 'external', full_name: name });
+  }
 }
 
 // Dohvati korisnike po apartmanu za dropdown čišćenja
@@ -128,6 +140,25 @@ const aptUsersForCleaningMap: Record<string, Array<{ user_id: string; full_name:
 for (const au of (allAptUsers ?? [])) {
   if (!aptUsersForCleaningMap[au.apartment_id]) aptUsersForCleaningMap[au.apartment_id] = [];
   aptUsersForCleaningMap[au.apartment_id].push({ user_id: au.user_id, full_name: aptUserProfileMap.get(au.user_id) ?? '?' });
+}
+
+// Dohvati pomoćno osoblje po apartmanu za dropdown čišćenja
+const { data: allAptExtRows } = await adminSupabase
+  .from('apartment_external_members')
+  .select('apartment_id, external_member_id')
+  .in('apartment_id', allApartmentIds.length > 0 ? allApartmentIds : ['none']);
+const allExtMemberIds = [...new Set((allAptExtRows ?? []).map((r) => r.external_member_id))];
+const { data: allExtMemberData } = allExtMemberIds.length > 0
+  ? await adminSupabase.from('external_members').select('id, name').in('id', allExtMemberIds)
+  : { data: [] };
+const allExtMemberMap = new Map((allExtMemberData ?? []).map((em) => [em.id, em]));
+// apartment_id -> [{ id, name }]
+const aptExtMembersForCleaningMap: Record<string, Array<{ id: string; name: string }>> = {};
+for (const row of (allAptExtRows ?? [])) {
+  const em = allExtMemberMap.get(row.external_member_id);
+  if (!em) continue;
+  if (!aptExtMembersForCleaningMap[row.apartment_id]) aptExtMembersForCleaningMap[row.apartment_id] = [];
+  aptExtMembersForCleaningMap[row.apartment_id].push({ id: em.id, name: em.name });
 }
 
 function formatDate(d: string): string {
@@ -361,61 +392,82 @@ const tabs = [
                     </button>
                   </td>
                   <td class="table-cell">
-                    {aptUsers.length > 0 ? (
-                      <div class="relative" id={`cleaning-wrap-${r.id}`}>
-                        <button
-                          type="button"
-                          onclick={`toggleCleaningDropdown('${r.id}')`}
-                          class="flex items-center gap-1 rounded-md border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 hover:bg-slate-50 max-w-[150px]"
-                        >
-                          {cleaners.length === 0 ? (
-                            <span class="text-slate-400">— Odaberi —</span>
-                          ) : (
-                            <span class="truncate">
-                              {cleaners.map((c) => c.full_name.split(' ')[0]).join(', ')}
-                            </span>
-                          )}
-                          <svg class="h-3 w-3 shrink-0 text-slate-400 ml-1" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd"/></svg>
-                        </button>
-                        <div
-                          id={`cleaning-dd-${r.id}`}
-                          class="hidden absolute z-30 left-0 top-full mt-1 w-52 rounded-xl border border-slate-200 bg-white shadow-lg p-2"
-                        >
-                          <div class="space-y-0.5 max-h-44 overflow-y-auto">
-                            {aptUsers.map((u) => (
-                              <label class="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-slate-50 cursor-pointer">
-                                <input
-                                  type="checkbox"
-                                  class="h-3.5 w-3.5 rounded border-slate-300 text-blue-600 cleaning-cb"
-                                  data-res={r.id}
-                                  value={u.user_id}
-                                  checked={cleaners.some((c) => c.user_id === u.user_id)}
-                                />
-                                <span class="text-xs text-slate-700">{u.full_name}</span>
-                              </label>
-                            ))}
-                          </div>
-                          <div class="border-t border-slate-100 mt-2 pt-2 flex gap-1.5">
-                            <button
-                              type="button"
-                              onclick={`saveCleaningAssignees('${r.id}', '${r.check_out}')`}
-                              class="flex-1 rounded-md bg-blue-600 px-2 py-1 text-xs font-semibold text-white hover:bg-blue-700"
-                            >
-                              Spremi
-                            </button>
-                            <button
-                              type="button"
-                              onclick={`toggleCleaningDropdown('${r.id}')`}
-                              class="rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50"
-                            >
-                              Zatvori
-                            </button>
+                    {(() => {
+                      const aptExtMembers = aptExtMembersForCleaningMap[r.apartment_id] ?? [];
+                      const hasAnyone = aptUsers.length > 0 || aptExtMembers.length > 0;
+                      return hasAnyone ? (
+                        <div class="relative" id={`cleaning-wrap-${r.id}`}>
+                          <button
+                            type="button"
+                            onclick={`toggleCleaningDropdown('${r.id}')`}
+                            class="flex items-center gap-1 rounded-md border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 hover:bg-slate-50 max-w-[150px]"
+                          >
+                            {cleaners.length === 0 ? (
+                              <span class="text-slate-400">— Odaberi —</span>
+                            ) : (
+                              <span class="truncate">
+                                {cleaners.map((c) => c.full_name.split(' ')[0]).join(', ')}
+                              </span>
+                            )}
+                            <svg class="h-3 w-3 shrink-0 text-slate-400 ml-1" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd"/></svg>
+                          </button>
+                          <div
+                            id={`cleaning-dd-${r.id}`}
+                            class="hidden absolute z-30 left-0 top-full mt-1 w-56 rounded-xl border border-slate-200 bg-white shadow-lg p-2"
+                          >
+                            <div class="space-y-0.5 max-h-52 overflow-y-auto">
+                              {aptUsers.map((u) => (
+                                <label class="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-slate-50 cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    class="h-3.5 w-3.5 rounded border-slate-300 text-blue-600 cleaning-cb"
+                                    data-res={r.id}
+                                    data-type="user"
+                                    value={u.user_id}
+                                    checked={cleaners.some((c) => c.type === 'user' && c.id === u.user_id)}
+                                  />
+                                  <span class="text-xs text-slate-700">{u.full_name}</span>
+                                </label>
+                              ))}
+                              {aptExtMembers.length > 0 && aptUsers.length > 0 && (
+                                <div class="border-t border-slate-100 my-1"></div>
+                              )}
+                              {aptExtMembers.map((em) => (
+                                <label class="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-slate-50 cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    class="h-3.5 w-3.5 rounded border-slate-300 text-purple-600 cleaning-cb"
+                                    data-res={r.id}
+                                    data-type="external"
+                                    value={em.id}
+                                    checked={cleaners.some((c) => c.type === 'external' && c.id === em.id)}
+                                  />
+                                  <span class="text-xs text-slate-700">{em.name} <span class="text-purple-600">(Pomoćno)</span></span>
+                                </label>
+                              ))}
+                            </div>
+                            <div class="border-t border-slate-100 mt-2 pt-2 flex gap-1.5">
+                              <button
+                                type="button"
+                                onclick={`saveCleaningAssignees('${r.id}', '${r.check_out}')`}
+                                class="flex-1 rounded-md bg-blue-600 px-2 py-1 text-xs font-semibold text-white hover:bg-blue-700"
+                              >
+                                Spremi
+                              </button>
+                              <button
+                                type="button"
+                                onclick={`toggleCleaningDropdown('${r.id}')`}
+                                class="rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50"
+                              >
+                                Zatvori
+                              </button>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    ) : (
-                      <span class="text-slate-400 text-xs">—</span>
-                    )}
+                      ) : (
+                        <span class="text-slate-400 text-xs">—</span>
+                      );
+                    })()}
                   </td>
                   {isAdmin && (
                     <td class="table-cell">
@@ -829,20 +881,25 @@ const tabs = [
   }
 
   async function saveCleaningAssignees(reservationId: string, checkOut: string) {
-    const checkboxes = document.querySelectorAll<HTMLInputElement>(
-      `.cleaning-cb[data-res="${reservationId}"]:checked`
+    const userCheckboxes = document.querySelectorAll<HTMLInputElement>(
+      `.cleaning-cb[data-res="${reservationId}"][data-type="user"]:checked`
     );
-    const userIds = Array.from(checkboxes).map((cb) => cb.value);
+    const extCheckboxes = document.querySelectorAll<HTMLInputElement>(
+      `.cleaning-cb[data-res="${reservationId}"][data-type="external"]:checked`
+    );
+    const userIds = Array.from(userCheckboxes).map((cb) => cb.value);
+    const externalIds = Array.from(extCheckboxes).map((cb) => cb.value);
+    const totalCount = userIds.length + externalIds.length;
 
     try {
       const res = await fetch('/api/rezervacije/assign-cleaning', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reservation_id: reservationId, user_ids: userIds, check_out: checkOut }),
+        body: JSON.stringify({ reservation_id: reservationId, user_ids: userIds, external_ids: externalIds }),
       });
       const data = await res.json();
       if (res.ok) {
-        showToast(userIds.length > 0 ? `${userIds.length} čistač(a) dodijeljen(o), zadatak kreiran.` : 'Dodjela čišćenja uklonjena.');
+        showToast(totalCount > 0 ? `${totalCount} čistač(a) dodijeljen(o), zadatak kreiran.` : 'Dodjela čišćenja uklonjena.');
         // Ažuriraj labelu gumba bez reload-a
         const btn = document.querySelector<HTMLButtonElement>(`#cleaning-wrap-${reservationId} button`);
         if (btn) {

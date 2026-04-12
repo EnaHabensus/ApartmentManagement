@@ -443,6 +443,12 @@ export async function sendTaskCompletedEmail({
   });
 }
 
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+export function getAppUrl(): string {
+  return getRuntimeEnv()?.APP_URL ?? import.meta.env.APP_URL ?? 'https://mojiapartmani.com';
+}
+
 // ─── Email #11: Odgovor na pozivnicu — obavijest adminu ───────────────────────
 export async function sendInviteResponseEmail({
   to,
@@ -478,6 +484,153 @@ export async function sendInviteResponseEmail({
             </p>
           </div>
           <p style="font-size: 12px; color: #9CA3AF; margin: 0;">Moji Apartmani — upravljanje apartmanima</p>
+        </div>
+      </div>
+    `,
+  });
+}
+
+// ─── Email #12: Dobrodošlica za pomoćno osoblje ───────────────────────────────
+export async function sendExternalWelcomeEmail({
+  to,
+  name,
+  apartmentNames,
+}: {
+  to: string;
+  name: string;
+  apartmentNames: string[];
+}) {
+  const apts = apartmentNames.join(', ');
+  return sendEmail({
+    from: getFromEmail(),
+    to,
+    subject: `Dodani ste u sustav apartmana ${apartmentNames[0] ?? ''}`,
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #111827;">
+        <div style="background: #0F2544; padding: 24px 32px; border-radius: 8px 8px 0 0;">
+          <h1 style="color: white; margin: 0; font-size: 20px;">Moji Apartmani</h1>
+        </div>
+        <div style="background: #F9FAFB; padding: 32px; border-radius: 0 0 8px 8px; border: 1px solid #E5E7EB; border-top: none;">
+          <p style="font-size: 16px; margin: 0 0 8px;">Hej <strong>${name}</strong>,</p>
+          <p style="font-size: 15px; color: #374151; margin: 0 0 20px;">
+            Dodani ste kao pomoćno osoblje za apartman <strong>${apts}</strong>.
+          </p>
+          <div style="background: white; border: 1px solid #E5E7EB; border-radius: 8px; padding: 20px; margin-bottom: 24px;">
+            <p style="margin: 0 0 12px; font-weight: bold; color: #0F2544;">Kako to funkcionira?</p>
+            <p style="margin: 0 0 8px; font-size: 14px; color: #374151;">
+              📧 Kada vam bude dodijeljen zadatak, primit ćete email s detaljima.
+            </p>
+            <p style="margin: 0 0 8px; font-size: 14px; color: #374151;">
+              ✅ U svakom emailu bit će gumb <strong>Označi kao završeno</strong> — kliknite ga kada obavite posao.
+            </p>
+            <p style="margin: 0; font-size: 14px; color: #374151;">
+              🔔 Na dan zadatka u 8:00 primit ćete podsjetnik.
+            </p>
+          </div>
+          <p style="font-size: 12px; color: #9CA3AF; margin: 0;">Moji Apartmani — upravljanje apartmanima</p>
+        </div>
+      </div>
+    `,
+  });
+}
+
+// ─── Email #13: Zadatak dodijeljen — pomoćno osoblje (s linkom za završetak) ──
+export async function sendTaskAssignedExternalEmail({
+  to,
+  name,
+  apartmentName,
+  taskTitle,
+  dueDate,
+  dueTime,
+  completionUrl,
+}: {
+  to: string;
+  name: string;
+  apartmentName: string;
+  taskTitle: string;
+  dueDate: string;
+  dueTime?: string | null;
+  completionUrl: string;
+}) {
+  const dateTime = dueTime ? `${dueDate} u ${dueTime}` : dueDate;
+  return sendEmail({
+    from: getFromEmail(),
+    to,
+    subject: `${apartmentName} — ${taskTitle} ${dateTime}`,
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #111827;">
+        <div style="background: #0F2544; padding: 24px 32px; border-radius: 8px 8px 0 0;">
+          <h1 style="color: white; margin: 0; font-size: 20px;">Moji Apartmani</h1>
+        </div>
+        <div style="background: #F9FAFB; padding: 32px; border-radius: 0 0 8px 8px; border: 1px solid #E5E7EB; border-top: none;">
+          <p style="font-size: 16px; margin: 0 0 8px;">Hej <strong>${name}</strong>,</p>
+          <p style="font-size: 15px; color: #374151; margin: 0 0 24px;">novi zadatak ti je dodijeljen za <strong>${apartmentName}</strong>.</p>
+          <div style="background: white; border: 1px solid #E5E7EB; border-radius: 8px; padding: 20px; margin-bottom: 24px;">
+            <p style="margin: 0 0 8px; font-size: 18px; font-weight: bold; color: #0F2544;">${taskTitle}</p>
+            <p style="margin: 0; color: #6B7280; font-size: 14px;">📅 ${dateTime}</p>
+          </div>
+          <div style="text-align: center; margin: 28px 0;">
+            <a href="${completionUrl}"
+               style="background: #16A34A; color: white; padding: 14px 32px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 15px; display: inline-block;">
+              ✅ Označi kao završeno
+            </a>
+          </div>
+          <p style="font-size: 13px; color: #6B7280; text-align: center; margin: 0 0 16px;">
+            Kliknite gumb kad završite zadatak — nije potrebna prijava.
+          </p>
+          <p style="font-size: 12px; color: #9CA3AF; margin: 0;">Moji Apartmani — upravljanje apartmanima</p>
+        </div>
+      </div>
+    `,
+  });
+}
+
+// ─── Email #14: Podsjetnik u 8h — pomoćno osoblje ────────────────────────────
+export async function sendTaskReminderExternalEmail({
+  to,
+  name,
+  todayStr,
+  tasks,
+}: {
+  to: string;
+  name: string;
+  todayStr: string;
+  tasks: Array<{ title: string; apartmentName: string; dueTime?: string | null; completionUrl: string }>;
+}) {
+  const [y, m, d] = todayStr.split('-');
+  const dateFmt = `${d}.${m}.${y}.`;
+
+  const taskCards = tasks.map((t) => {
+    const time = t.dueTime ? ` u ${t.dueTime}` : '';
+    return `
+      <div style="background: white; border: 1px solid #E5E7EB; border-radius: 8px; padding: 18px 20px; margin-bottom: 12px;">
+        <p style="margin: 0 0 4px; font-size: 16px; font-weight: bold; color: #0F2544;">${t.title}</p>
+        <p style="margin: 0 0 14px; font-size: 13px; color: #6B7280;">${t.apartmentName}${time}</p>
+        <a href="${t.completionUrl}"
+           style="background: #16A34A; color: white; padding: 10px 22px; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 13px; display: inline-block;">
+          ✅ Označi kao završeno
+        </a>
+      </div>
+    `;
+  }).join('');
+
+  return sendEmail({
+    from: getFromEmail(),
+    to,
+    subject: `Podsjetnik — tvoji zadatci danas ${dateFmt}`,
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #111827;">
+        <div style="background: #0F2544; padding: 24px 32px; border-radius: 8px 8px 0 0;">
+          <h1 style="color: white; margin: 0; font-size: 20px;">Moji Apartmani</h1>
+          <p style="color: #93C5FD; margin: 4px 0 0; font-size: 13px;">Podsjetnik — ${dateFmt}</p>
+        </div>
+        <div style="background: #F9FAFB; padding: 32px; border-radius: 0 0 8px 8px; border: 1px solid #E5E7EB; border-top: none;">
+          <p style="font-size: 15px; margin: 0 0 20px;">Hej <strong>${name}</strong>, ovo su tvoji zadatci za danas:</p>
+          ${taskCards}
+          <p style="font-size: 13px; color: #6B7280; margin: 16px 0 0;">
+            Kliknite gumb pored svakog zadatka kada ga završite.
+          </p>
+          <p style="font-size: 12px; color: #9CA3AF; margin: 8px 0 0;">Moji Apartmani — upravljanje apartmanima</p>
         </div>
       </div>
     `,

@@ -87,26 +87,44 @@ if (allApartmentIds.length > 0) {
         .in('id', taskAptIds);
       const aptMap = new Map((aptData ?? []).map((a) => [a.id, a]));
 
-      // Dohvati assignee-je
+      // Dohvati assignee-je (regularne korisnike i pomoćno osoblje)
       const { data: assigneeRows } = await adminSupabase
         .from('task_assignees')
-        .select('task_id, user_id')
+        .select('task_id, user_id, external_member_id')
         .in('task_id', taskIds);
 
-      const assigneeUserIds = [...new Set((assigneeRows ?? []).map((a) => a.user_id))];
+      const assigneeUserIds = [...new Set((assigneeRows ?? []).filter((a) => a.user_id).map((a) => a.user_id as string))];
       const { data: assigneeProfiles } = assigneeUserIds.length > 0
         ? await adminSupabase.from('profiles').select('id, full_name, email').in('id', assigneeUserIds)
         : { data: [] };
       const profileMap = new Map((assigneeProfiles ?? []).map((p) => [p.id, p]));
 
+      const assigneeExtIds = [...new Set((assigneeRows ?? []).filter((a) => a.external_member_id).map((a) => a.external_member_id as string))];
+      const { data: assigneeExtMembers } = assigneeExtIds.length > 0
+        ? await adminSupabase.from('external_members').select('id, name').in('id', assigneeExtIds)
+        : { data: [] };
+      const extMemberMap = new Map((assigneeExtMembers ?? []).map((em) => [em.id, em]));
+
       // Grupiraj assignee-je po task_id
-      const taskAssigneesMap = new Map<string, Array<{ user_id: string; profiles: { full_name: string; email: string } }>>();
+      const taskAssigneesMap = new Map<string, Array<{ user_id: string | null; external_member_id?: string | null; profiles: { full_name: string; email: string } }>>();
       for (const row of (assigneeRows ?? [])) {
-        const p = profileMap.get(row.user_id);
+        let displayName = 'Nepoznat';
+        let email = '';
+        if (row.user_id) {
+          const p = profileMap.get(row.user_id);
+          displayName = p?.full_name ?? 'Nepoznat';
+          email = p?.email ?? '';
+        } else if (row.external_member_id) {
+          const em = extMemberMap.get(row.external_member_id);
+          displayName = em?.name ?? 'Nepoznato osoblje';
+        } else {
+          continue;
+        }
         if (!taskAssigneesMap.has(row.task_id)) taskAssigneesMap.set(row.task_id, []);
         taskAssigneesMap.get(row.task_id)!.push({
           user_id: row.user_id,
-          profiles: { full_name: p?.full_name ?? 'Nepoznat', email: p?.email ?? '' },
+          external_member_id: row.external_member_id,
+          profiles: { full_name: displayName, email },
         });
       }
 
@@ -148,6 +166,31 @@ if (isAdmin && adminApartmentIds.length > 0) {
       full_name: p.full_name ?? 'Nepoznat',
       email: p.email ?? '',
     });
+  }
+}
+
+// Dohvati pomoćno osoblje po apartmanu za multiselect (samo admin)
+const apartmentExternalMembersMap: Record<string, Array<{ id: string; name: string }>> = {};
+
+if (isAdmin && adminApartmentIds.length > 0) {
+  const { data: aemRows } = await adminSupabase
+    .from('apartment_external_members')
+    .select('apartment_id, external_member_id')
+    .in('apartment_id', adminApartmentIds);
+
+  const extIds = [...new Set((aemRows ?? []).map((r) => r.external_member_id))];
+  const { data: extMembersData } = extIds.length > 0
+    ? await adminSupabase.from('external_members').select('id, name').in('id', extIds)
+    : { data: [] };
+
+  const extMap = new Map((extMembersData ?? []).map((em) => [em.id, em]));
+  for (const row of (aemRows ?? [])) {
+    const em = extMap.get(row.external_member_id);
+    if (!em) continue;
+    if (!apartmentExternalMembersMap[row.apartment_id]) {
+      apartmentExternalMembersMap[row.apartment_id] = [];
+    }
+    apartmentExternalMembersMap[row.apartment_id].push({ id: em.id, name: em.name });
   }
 }
 
@@ -330,7 +373,8 @@ function getInitials(name: string): string {
                             apartment_id: task.apartment_id,
                             due_date: task.due_date,
                             due_time: task.due_time ?? '',
-                            assignee_ids: task.task_assignees.map((a) => a.user_id),
+                            assignee_ids: task.task_assignees.filter((a) => (a as any).user_id).map((a) => (a as any).user_id),
+                            assignee_external_ids: task.task_assignees.filter((a) => (a as any).external_member_id).map((a) => (a as any).external_member_id),
                           })})`}
                           class="btn-ghost text-xs px-2 py-1"
                         >
@@ -399,6 +443,7 @@ function getInitials(name: string): string {
                 <p class="text-sm text-gray-400">Odaberite apartman za prikaz korisnika.</p>
               </div>
               <input type="hidden" name="assignee_ids" id="add-assignee_ids" value="[]" />
+              <input type="hidden" name="external_assignee_ids" id="add-external_assignee_ids" value="[]" />
             </div>
             <div class="flex justify-end gap-3 pt-2">
               <button
@@ -457,6 +502,7 @@ function getInitials(name: string): string {
                 <p class="text-sm text-gray-400">Učitavanje...</p>
               </div>
               <input type="hidden" name="assignee_ids" id="edit-assignee_ids" value="[]" />
+              <input type="hidden" name="external_assignee_ids" id="edit-external_assignee_ids" value="[]" />
             </div>
             <div class="flex justify-end gap-3 pt-2">
               <button
@@ -505,7 +551,7 @@ function getInitials(name: string): string {
   ></div>
 </AppLayout>
 
-<script define:vars={{ apartmentUsersMap }}>
+<script define:vars={{ apartmentUsersMap, apartmentExternalMembersMap }}>
   // ─── Helpers ─────────────────────────────────────────────────────────────────
 
   function closeModalOnOverlay(event, id) {
@@ -529,38 +575,67 @@ function getInitials(name: string): string {
 
   // ─── Renderiranje assignee checkboxova ───────────────────────────────────────
 
-  function renderAssignees(containerId, apartmentId, selectedIds = []) {
+  function renderAssignees(containerId, apartmentId, selectedIds = [], selectedExtIds = []) {
     const container = document.getElementById(containerId);
     if (!container) return;
 
     const users = apartmentUsersMap[apartmentId] ?? [];
-    if (users.length === 0) {
+    const extMembers = apartmentExternalMembersMap[apartmentId] ?? [];
+
+    if (users.length === 0 && extMembers.length === 0) {
       container.innerHTML = '<p class="text-sm text-gray-400">Nema korisnika na ovom apartmanu.</p>';
       return;
     }
 
-    container.innerHTML = users
-      .map(
-        (u) => `
+    let html = '';
+
+    if (users.length > 0) {
+      html += users.map((u) => `
         <label class="flex items-center gap-2 cursor-pointer">
           <input
             type="checkbox"
             class="assignee-cb h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
             data-container="${containerId}"
+            data-type="user"
             value="${u.user_id}"
             ${selectedIds.includes(u.user_id) ? 'checked' : ''}
           />
           <span class="text-sm text-gray-700">${u.full_name} <span class="text-gray-400">(${u.email})</span></span>
-        </label>`
-      )
-      .join('');
+        </label>`).join('');
+    }
+
+    if (extMembers.length > 0) {
+      if (users.length > 0) html += '<div class="border-t border-gray-100 my-2"></div>';
+      html += '<p class="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1">Pomoćno osoblje</p>';
+      html += extMembers.map((em) => `
+        <label class="flex items-center gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            class="assignee-cb h-4 w-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+            data-container="${containerId}"
+            data-type="external"
+            value="${em.id}"
+            ${selectedExtIds.includes(em.id) ? 'checked' : ''}
+          />
+          <span class="text-sm text-gray-700">${em.name} <span class="text-xs bg-purple-100 text-purple-700 px-1 rounded ml-1">Pomoćno osoblje</span></span>
+        </label>`).join('');
+    }
+
+    container.innerHTML = html;
   }
 
   function collectAssigneeIds(containerId) {
-    const checkboxes = document.querySelectorAll(
-      `#${containerId} .assignee-cb:checked`
-    );
-    return Array.from(checkboxes).map((cb) => cb.value);
+    const checkboxes = document.querySelectorAll(`#${containerId} .assignee-cb:checked`);
+    const userIds = [];
+    const externalIds = [];
+    for (const cb of checkboxes) {
+      if (cb.dataset.type === 'external') {
+        externalIds.push(cb.value);
+      } else {
+        userIds.push(cb.value);
+      }
+    }
+    return { userIds, externalIds };
   }
 
   // ─── Modal: Dodaj ────────────────────────────────────────────────────────────
@@ -575,7 +650,7 @@ function getInitials(name: string): string {
   }
 
   function onAddApartmentChange(apartmentId) {
-    renderAssignees('add-assignees-list', apartmentId, []);
+    renderAssignees('add-assignees-list', apartmentId, [], []);
   }
 
   // ─── Modal: Uredi ────────────────────────────────────────────────────────────
@@ -589,24 +664,26 @@ function getInitials(name: string): string {
     const aptSelect = document.getElementById('edit-apartment_id');
     aptSelect.value = task.apartment_id;
 
-    renderAssignees('edit-assignees-list', task.apartment_id, task.assignee_ids ?? []);
+    renderAssignees('edit-assignees-list', task.apartment_id, task.assignee_ids ?? [], task.assignee_external_ids ?? []);
 
     document.getElementById('modal-edit')?.classList.remove('hidden');
   }
 
   function onEditApartmentChange(apartmentId) {
-    renderAssignees('edit-assignees-list', apartmentId, []);
+    renderAssignees('edit-assignees-list', apartmentId, [], []);
   }
 
   function prepareEditSubmit() {
-    const ids = collectAssigneeIds('edit-assignees-list');
-    document.getElementById('edit-assignee_ids').value = JSON.stringify(ids);
+    const { userIds, externalIds } = collectAssigneeIds('edit-assignees-list');
+    document.getElementById('edit-assignee_ids').value = JSON.stringify(userIds);
+    document.getElementById('edit-external_assignee_ids').value = JSON.stringify(externalIds);
   }
 
   // Prikupi assignee ids i spremi u hidden input prije submita (add modal)
   document.querySelector('form[action="/api/zadatci/create"]')?.addEventListener('submit', () => {
-    const ids = collectAssigneeIds('add-assignees-list');
-    document.getElementById('add-assignee_ids').value = JSON.stringify(ids);
+    const { userIds, externalIds } = collectAssigneeIds('add-assignees-list');
+    document.getElementById('add-assignee_ids').value = JSON.stringify(userIds);
+    document.getElementById('add-external_assignee_ids').value = JSON.stringify(externalIds);
   });
 
   // ─── Modal: Obriši ───────────────────────────────────────────────────────────

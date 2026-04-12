@@ -3,6 +3,8 @@ import {
   sendCleaningReminderEmail,
   sendDailyAdminDigestEmail,
   sendDailyStaffDigestEmail,
+  sendTaskReminderExternalEmail,
+  getAppUrl,
 } from '../../../lib/resend';
 import type { APIRoute } from 'astro';
 
@@ -200,7 +202,7 @@ export const GET: APIRoute = async ({ request }) => {
     // Dohvati assigneeje za zadatke
     const taskIds = (todayTasks ?? []).map((t) => t.id);
     const { data: taskAssigneeRows } = taskIds.length > 0
-      ? await supabase.from('task_assignees').select('task_id, user_id').in('task_id', taskIds)
+      ? await supabase.from('task_assignees').select('task_id, user_id').in('task_id', taskIds).not('user_id', 'is', null)
       : { data: [] };
     const allAssigneeIds = [...new Set((taskAssigneeRows ?? []).map((r) => r.user_id))];
     const { data: assigneeProfiles } = allAssigneeIds.length > 0
@@ -274,7 +276,7 @@ export const GET: APIRoute = async ({ request }) => {
 
     const staffTaskIds = (staffTasks ?? []).map((t) => t.id);
     const { data: staffAssigneeRows } = staffTaskIds.length > 0
-      ? await supabase.from('task_assignees').select('task_id, user_id').in('task_id', staffTaskIds)
+      ? await supabase.from('task_assignees').select('task_id, user_id').in('task_id', staffTaskIds).not('user_id', 'is', null)
       : { data: [] };
 
     // Grupiraj po user_id
@@ -317,6 +319,85 @@ export const GET: APIRoute = async ({ request }) => {
     results.job4_staff_digest = { sent: staffDigestsSent };
   } catch (err) {
     results.job4_staff_digest = { error: String(err) };
+  }
+
+  // ─── Job 5: Podsjetnik u 8h za pomoćno osoblje ────────────────────────────────
+  try {
+    // Dohvati zadatke za danas koji su nekompletni i imaju external assignee-je
+    const { data: extTasks } = await supabase
+      .from('tasks')
+      .select('id, title, due_date, due_time, apartment_id')
+      .eq('due_date', todayStr)
+      .eq('is_completed', false);
+
+    const extTaskIds = (extTasks ?? []).map((t: any) => t.id);
+    const { data: extAssigneeRows } = extTaskIds.length > 0
+      ? await supabase
+          .from('task_assignees')
+          .select('id, task_id, external_member_id, completion_token, reminder_sent_date')
+          .in('task_id', extTaskIds)
+          .not('external_member_id', 'is', null)
+          .or(`reminder_sent_date.is.null,reminder_sent_date.neq.${todayStr}`)
+      : { data: [] };
+
+    if (extAssigneeRows && extAssigneeRows.length > 0) {
+      const extMemberIds = [...new Set(extAssigneeRows.map((r: any) => r.external_member_id as string))];
+      const { data: extMembers } = await supabase
+        .from('external_members')
+        .select('id, name, email')
+        .in('id', extMemberIds);
+
+      const extMemberMap = new Map((extMembers ?? []).map((em: any) => [em.id, em]));
+      const allAptRows = await supabase.from('apartments').select('id, name');
+      const aptNameMap2 = new Map(((allAptRows.data ?? []) as any[]).map((a) => [a.id, a.name]));
+      const taskMap2 = new Map((extTasks ?? []).map((t: any) => [t.id, t]));
+      const appUrl = getAppUrl();
+
+      // Grupiraj po external_member_id
+      const tasksByExt = new Map<string, typeof extAssigneeRows[number][]>();
+      for (const row of extAssigneeRows) {
+        const eid = (row as any).external_member_id as string;
+        if (!tasksByExt.has(eid)) tasksByExt.set(eid, []);
+        tasksByExt.get(eid)!.push(row);
+      }
+
+      let extRemindersSent = 0;
+      for (const [eid, rows] of tasksByExt) {
+        const em = extMemberMap.get(eid);
+        if (!em) continue;
+
+        const tasks = rows.map((row: any) => {
+          const t = taskMap2.get(row.task_id);
+          return {
+            title: t?.title ?? '',
+            apartmentName: aptNameMap2.get(t?.apartment_id) ?? '',
+            dueTime: t?.due_time ?? null,
+            completionUrl: `${appUrl}/api/zadatci/complete-token?token=${row.completion_token}`,
+          };
+        }).filter((t) => t.title);
+
+        if (tasks.length === 0) continue;
+
+        await sendTaskReminderExternalEmail({
+          to: (em as any).email,
+          name: (em as any).name,
+          todayStr,
+          tasks,
+        });
+
+        // Označi da je reminder poslan danas
+        const rowIds = rows.map((r: any) => r.id);
+        await supabase.from('task_assignees').update({ reminder_sent_date: todayStr }).in('id', rowIds);
+
+        extRemindersSent++;
+      }
+
+      results.job5_external_reminders = { sent: extRemindersSent };
+    } else {
+      results.job5_external_reminders = { sent: 0 };
+    }
+  } catch (err) {
+    results.job5_external_reminders = { error: String(err) };
   }
 
   return new Response(JSON.stringify({ ok: true, results }), {

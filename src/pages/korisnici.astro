@@ -119,6 +119,54 @@ const pendingInvites = (pendingInviteRows ?? [])
       })),
   }));
 
+// Dohvati pomoćno osoblje (external members) za admin-ove apartmane
+const { data: aemRows } = await adminSupabase
+  .from('apartment_external_members')
+  .select('external_member_id, apartment_id')
+  .in('apartment_id', adminApartmentIds);
+
+const filteredAemRows = filterApartmentId
+  ? (aemRows ?? []).filter((r) => r.apartment_id === filterApartmentId)
+  : (aemRows ?? []);
+
+const extIds = [...new Set(filteredAemRows.map((r) => r.external_member_id))];
+const { data: extMembersData } = extIds.length > 0
+  ? await adminSupabase.from('external_members').select('id, name, email').in('id', extIds)
+  : { data: [] };
+
+const extMembersMap = new Map((extMembersData ?? []).map((em) => [em.id, em]));
+
+// Grupiraj external members po osobi (s listom apartmana)
+const extUsersMap = new Map<string, {
+  external_member_id: string;
+  name: string;
+  email: string;
+  apartments: Array<{ apartment_id: string; apartment_name: string; color: string }>;
+}>();
+
+for (const row of filteredAemRows) {
+  const em = extMembersMap.get(row.external_member_id);
+  if (!em) continue;
+  const existing = extUsersMap.get(row.external_member_id);
+  const aptEntry = {
+    apartment_id: row.apartment_id,
+    apartment_name: apartmentsNameMap.get(row.apartment_id) ?? '',
+    color: apartmentsColorMap.get(row.apartment_id) ?? '#3B82F6',
+  };
+  if (existing) {
+    existing.apartments.push(aptEntry);
+  } else {
+    extUsersMap.set(row.external_member_id, {
+      external_member_id: row.external_member_id,
+      name: em.name,
+      email: em.email,
+      apartments: [aptEntry],
+    });
+  }
+}
+
+const externalUsers = Array.from(extUsersMap.values());
+
 const success = Astro.url.searchParams.get('success');
 const error = Astro.url.searchParams.get('error');
 ---
@@ -129,7 +177,7 @@ const error = Astro.url.searchParams.get('error');
     <div class="flex items-center justify-between mb-6">
       <div>
         <h1 class="text-2xl font-bold text-gray-900">Korisnici</h1>
-        <p class="text-gray-500 text-sm mt-1">{users.length} korisnik{users.length === 1 ? '' : users.length < 5 ? 'a' : 'a'}</p>
+        <p class="text-gray-500 text-sm mt-1">{users.length + externalUsers.length} korisnik{(users.length + externalUsers.length) === 1 ? '' : (users.length + externalUsers.length) < 5 ? 'a' : 'a'}</p>
       </div>
       <button
         onclick="document.getElementById('modal-add').classList.remove('hidden')"
@@ -238,6 +286,45 @@ const error = Astro.url.searchParams.get('error');
                 </td>
               </tr>
             ))}
+            {externalUsers.map((eu) => (
+              <tr class="table-row">
+                <td class="table-cell px-4 py-3 font-medium text-gray-900 whitespace-nowrap">{eu.name}</td>
+                <td class="table-cell px-4 py-3 text-gray-500">{eu.email}</td>
+                <td class="table-cell px-4 py-3">
+                  <span class="badge bg-purple-100 text-purple-700">Pomoćno osoblje</span>
+                </td>
+                <td class="table-cell px-4 py-3">
+                  <span class="badge bg-slate-100 text-slate-600">Bez prijave</span>
+                </td>
+                <td class="table-cell px-4 py-3">
+                  <div class="flex flex-wrap gap-1">
+                    {eu.apartments.map((apt) => (
+                      <span
+                        class="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium whitespace-nowrap"
+                        style={`background-color: ${apt.color}20; color: ${apt.color}; box-shadow: inset 0 0 0 1px ${apt.color}40`}
+                      >{apt.apartment_name}</span>
+                    ))}
+                  </div>
+                </td>
+                <td class="table-cell px-4 py-3">
+                  <div class="flex items-center gap-1">
+                    {eu.apartments.map((apt) => (
+                      <form action="/api/korisnici/delete-external" method="POST">
+                        <input type="hidden" name="external_member_id" value={eu.external_member_id} />
+                        <input type="hidden" name="apartment_id" value={apt.apartment_id} />
+                        <button
+                          type="submit"
+                          class="btn-ghost text-xs px-2 py-1 text-red-500 hover:bg-red-50 hover:text-red-700"
+                          onclick="return confirm('Ukloniti ovu osobu s apartmana?')"
+                        >
+                          Ukloni{eu.apartments.length > 1 ? ` (${apt.apartment_name})` : ''}
+                        </button>
+                      </form>
+                    ))}
+                  </div>
+                </td>
+              </tr>
+            ))}
             {pendingInvites.map((inv) => (
               <tr class="table-row bg-orange-50/30">
                 <td class="table-cell px-4 py-3 font-medium text-gray-900 whitespace-nowrap">{inv.full_name}</td>
@@ -297,11 +384,15 @@ const error = Astro.url.searchParams.get('error');
         </div>
         <div>
           <label class="label">Uloga</label>
-          <select id="add-role" class="input">
+          <select id="add-role" class="input" onchange="onRoleChange(this.value)">
             <option value="staff">Staff</option>
             <option value="admin">Admin</option>
+            <option value="pomocni">Pomoćno osoblje</option>
           </select>
         </div>
+        <p id="add-role-hint" class="hidden text-sm text-slate-500 -mt-2 bg-slate-50 rounded-lg px-3 py-2">
+          Pomoćno osoblje se dodaje bez prijave u sustav. Zadatke dobiva i završava emailom.
+        </p>
         <div>
           <label class="label">Apartmani *</label>
           <div class="space-y-2 mt-1">
@@ -338,6 +429,14 @@ const error = Astro.url.searchParams.get('error');
             class="btn-primary"
           >
             Pošalji pozivnicu
+          </button>
+          <button
+            type="button"
+            id="btn-add-external"
+            onclick="addExternalMember()"
+            class="btn-primary hidden"
+          >
+            Dodaj osoblje
           </button>
         </div>
       </div>
@@ -595,6 +694,73 @@ const error = Astro.url.searchParams.get('error');
     document.getElementById('modal-delete')?.classList.remove('hidden');
   }
 
+  // ─── Role change toggle ───────────────────────────────────────────────────────
+
+  function onRoleChange(value: string) {
+    const hint = document.getElementById('add-role-hint')!;
+    const btnInvite = document.getElementById('btn-send-invite')!;
+    const btnExternal = document.getElementById('btn-add-external')!;
+    if (value === 'pomocni') {
+      hint.classList.remove('hidden');
+      btnInvite.classList.add('hidden');
+      btnExternal.classList.remove('hidden');
+    } else {
+      hint.classList.add('hidden');
+      btnInvite.classList.remove('hidden');
+      btnExternal.classList.add('hidden');
+    }
+  }
+
+  // ─── Dodaj pomoćno osoblje ────────────────────────────────────────────────────
+
+  async function addExternalMember() {
+    const email = (document.getElementById('add-email') as HTMLInputElement).value.trim();
+    const name = (document.getElementById('add-full_name') as HTMLInputElement).value.trim();
+    const checkboxes = document.querySelectorAll<HTMLInputElement>('.add-apt-checkbox:checked');
+    const apartment_ids = Array.from(checkboxes).map((cb) => cb.value);
+
+    const errorEl = document.getElementById('add-error')!;
+    const errorMsg = document.getElementById('add-error-msg')!;
+    errorEl.classList.add('hidden');
+
+    if (!email || !name) {
+      errorMsg.textContent = 'Email i ime su obavezni.';
+      errorEl.classList.remove('hidden');
+      return;
+    }
+    if (apartment_ids.length === 0) {
+      errorMsg.textContent = 'Odaberite barem jedan apartman.';
+      errorEl.classList.remove('hidden');
+      return;
+    }
+
+    const btn = document.getElementById('btn-add-external') as HTMLButtonElement;
+    btn.disabled = true;
+    btn.textContent = 'Dodavanje...';
+
+    try {
+      const res = await fetch('/api/korisnici/add-external', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, email, apartment_ids }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        errorMsg.textContent = data.error ?? 'Greška pri dodavanju osoblja.';
+        errorEl.classList.remove('hidden');
+      } else {
+        document.getElementById('modal-add')?.classList.add('hidden');
+        window.location.href = '/korisnici?success=external_added';
+      }
+    } catch {
+      errorMsg.textContent = 'Greška pri dodavanju osoblja.';
+      errorEl.classList.remove('hidden');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Dodaj osoblje';
+    }
+  }
+
   // Expose to global scope
   (window as any).closeModalOnOverlay = closeModalOnOverlay;
   (window as any).toggleDropdown = toggleDropdown;
@@ -602,6 +768,8 @@ const error = Astro.url.searchParams.get('error');
   (window as any).openEditModal = openEditModal;
   (window as any).prepareEditSubmit = prepareEditSubmit;
   (window as any).confirmDelete = confirmDelete;
+  (window as any).onRoleChange = onRoleChange;
+  (window as any).addExternalMember = addExternalMember;
 
   function showToast(message: string, type: 'success' | 'error' = 'success') {
     let toast = document.getElementById('_toast');
@@ -612,7 +780,7 @@ const error = Astro.url.searchParams.get('error');
   }
   const _p = new URLSearchParams(window.location.search);
   const _s = _p.get('success'), _e = _p.get('error');
-  const _m: Record<string, string> = { updated: 'Korisnik je uspješno ažuriran.', deleted: 'Korisnik je uspješno uklonjen.', invited: 'Pozivnica je uspješno poslana.', invite_cancelled: 'Pozivnica je poništena.' };
+  const _m: Record<string, string> = { updated: 'Korisnik je uspješno ažuriran.', deleted: 'Korisnik je uspješno uklonjen.', invited: 'Pozivnica je uspješno poslana.', invite_cancelled: 'Pozivnica je poništena.', external_added: 'Pomoćno osoblje je uspješno dodano.', external_deleted: 'Osoblje je uspješno uklonjeno.' };
   if (_s && _m[_s]) showToast(_m[_s], 'success');
   if (_e) showToast(decodeURIComponent(_e), 'error');
   if (_s || _e) { const _url = new URL(window.location.href); _url.searchParams.delete('success'); _url.searchParams.delete('error'); history.replaceState({}, '', _url.toString()); }

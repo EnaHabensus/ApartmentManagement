@@ -1,0 +1,76 @@
+---
+import '../styles/global.css';
+const status = Astro.url.searchParams.get('status') ?? 'invalid';
+const taskName = Astro.url.searchParams.get('task') ?? '';
+---
+
+<!DOCTYPE html>
+<html lang="hr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Zadatak — Moji Apartmani</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  </head>
+  <body class="min-h-screen bg-slate-50 flex items-center justify-center p-6">
+    <div class="w-full max-w-md">
+      <div class="bg-white rounded-2xl shadow-[0_8px_40px_rgba(0,0,0,0.10)] p-10 text-center">
+
+        <!-- Logo -->
+        <div class="inline-flex items-center gap-2 mb-8">
+          <div class="h-7 w-7 rounded-lg bg-blue-600 flex items-center justify-center">
+            <span class="text-white font-bold text-[11px] tracking-tight">MA</span>
+          </div>
+          <span class="text-sm font-semibold text-slate-900">Moji Apartmani</span>
+        </div>
+
+        {status === 'success' && (
+          <div>
+            <div class="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-green-100">
+              <svg class="h-8 w-8 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+            <h1 class="text-xl font-semibold text-slate-900 mb-2">Zadatak završen!</h1>
+            {taskName && (
+              <p class="text-slate-600 mb-1">
+                <strong class="text-slate-800">{taskName}</strong>
+              </p>
+            )}
+            <p class="text-sm text-slate-500">Odlično! Zadatak je označen kao završen. Vlasnik apartmana je obaviješten.</p>
+          </div>
+        )}
+
+        {status === 'already_done' && (
+          <div>
+            <div class="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-blue-100">
+              <svg class="h-8 w-8 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+            <h1 class="text-xl font-semibold text-slate-900 mb-2">Već završeno</h1>
+            {taskName && (
+              <p class="text-slate-600 mb-1">
+                <strong class="text-slate-800">{taskName}</strong>
+              </p>
+            )}
+            <p class="text-sm text-slate-500">Ovaj zadatak je već ranije označen kao završen.</p>
+          </div>
+        )}
+
+        {status === 'invalid' && (
+          <div>
+            <div class="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-red-100">
+              <svg class="h-8 w-8 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </div>
+            <h1 class="text-xl font-semibold text-slate-900 mb-2">Nevažeći link</h1>
+            <p class="text-sm text-slate-500">Ovaj link nije valjan ili je istekao. Kontaktirajte voditelja apartmana.</p>
+          </div>
+        )}
+
+      </div>
+    </div>
+  </body>
+</html>
