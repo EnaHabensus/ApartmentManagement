@@ -214,7 +214,7 @@ function nights(ci: string, co: string) {
             <select
               name="apartment"
               onchange="document.getElementById('form-apt').submit()"
-              class="input text-sm py-1.5 w-auto"
+              class="input text-sm w-auto"
             >
               <option value="all" selected={aptFilter === 'all'}>Svi apartmani</option>
               {apartments.map((a) => (
@@ -230,7 +230,7 @@ function nights(ci: string, co: string) {
           <select
             name="period"
             onchange="document.getElementById('form-period').submit()"
-            class="input text-sm py-1.5 w-auto"
+            class="input text-sm w-auto"
           >
             <option value="all" selected={period === 'all'}>Od početka</option>
             <option value="this_month" selected={period === 'this_month'}>Ovaj mjesec</option>
@@ -252,7 +252,7 @@ function nights(ci: string, co: string) {
           { label: 'Ukupno rezervacija', value: String(activeRez.length) },
           { label: 'Završene smjene', value: String(completedCount) },
         ].map(({ label, value }) => (
-          <div class="card p-4 md:p-4 flex-shrink-0 w-44 md:w-auto snap-start">
+          <div class="card px-4 py-5 md:p-4 flex-shrink-0 w-44 md:w-auto snap-start">
             <p class="text-xs font-medium text-gray-500 mb-1.5 leading-tight">{label}</p>
             <p class="text-2xl md:text-xl font-bold text-gray-900 truncate">{value}</p>
           </div>
