@@ -340,20 +340,16 @@ const tabs = [
                 </div>
                 {/* Redak 2: ime gosta */}
                 <p class="font-semibold text-slate-900 truncate mb-1.5">{r.guest_name}</p>
-                {/* Redak 3: datumi + noćenja + detalji */}
-                <div class="flex items-center justify-between gap-2">
-                  <div class="flex items-center gap-2 min-w-0">
-                    <span class="text-sm text-slate-600 whitespace-nowrap">{formatDate(r.check_in)} → {formatDate(r.check_out)}</span>
-                    <span class="text-xs text-slate-400 whitespace-nowrap">{nocenja === 1 ? '1 noć' : `${nocenja} noćenja`}</span>
-                  </div>
-                  <div class="flex items-center gap-0.5 flex-shrink-0 text-slate-400">
-                    <span class="text-xs">Detalji</span>
-                    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
-                  </div>
+                {/* Redak 3: datumi + noćenja */}
+                <div class="flex items-center gap-2 mb-2">
+                  <span class="text-sm text-slate-600 whitespace-nowrap">{formatDate(r.check_in)} → {formatDate(r.check_out)}</span>
+                  <span class="text-xs text-slate-400 whitespace-nowrap">{nocenja === 1 ? '1 noć' : `${nocenja} noćenja`}</span>
                 </div>
-                <span id={`card-cleaners-${r.id}`} class={`text-xs text-slate-400 mt-1 block ${cleaners.length === 0 ? 'hidden' : ''}`}>
-                  {cleaners.map((c) => c.full_name.split(' ')[0]).join(', ')}
-                </span>
+                {/* Redak 4: detalji link */}
+                <div class="flex items-center gap-0.5 text-blue-600">
+                  <span class="text-xs font-medium">Detalji</span>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+                </div>
               </div>
             );
           })}
