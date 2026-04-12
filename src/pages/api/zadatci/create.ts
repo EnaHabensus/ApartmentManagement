@@ -69,16 +69,18 @@ export const POST: APIRoute = async ({ request, cookies, redirect }) => {
       ]);
 
       const dueDate = due_date.split('-').reverse().join('.');
-      for (const profile of profiles ?? []) {
-        sendTaskAssignedEmail({
-          to: profile.email,
-          assigneeName: profile.full_name,
-          apartmentName: apt?.name ?? '',
-          taskTitle: title,
-          dueDate,
-          dueTime: due_time,
-        }).catch(() => {});
-      }
+      await Promise.all(
+        (profiles ?? []).map((profile) =>
+          sendTaskAssignedEmail({
+            to: profile.email,
+            assigneeName: profile.full_name,
+            apartmentName: apt?.name ?? '',
+            taskTitle: title,
+            dueDate,
+            dueTime: due_time,
+          }).catch(() => {})
+        )
+      );
     }
   }
 

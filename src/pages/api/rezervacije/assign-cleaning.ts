@@ -114,23 +114,31 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     const profileMap = new Map((profiles ?? []).map((p) => [p.id, p]));
     const dueDate = reservation.check_out.split('-').reverse().join('.');
 
-    for (const uid of addedIds) {
-      const p = profileMap.get(uid);
-      if (p) sendTaskAssignedEmail({
+  // Email notifikacije — awaited prije returna (CF Workers terminira worker odmah po return)
+  const emailPromises: Promise<any>[] = [];
+
+  for (const uid of addedIds) {
+    const p = profileMap.get(uid);
+    if (p) emailPromises.push(
+      sendTaskAssignedEmail({
         to: p.email, assigneeName: p.full_name,
         apartmentName, taskTitle: 'Čišćenje',
         dueDate, dueTime: checkOutTime,
-      }).catch(() => {});
-    }
-    for (const uid of removedIds) {
-      const p = profileMap.get(uid);
-      if (p) sendTaskCancelledEmail({
-        to: p.email, assigneeName: p.full_name,
-        apartmentName, taskTitle: 'Čišćenje',
-        dueDate, dueTime: checkOutTime,
-      }).catch(() => {});
-    }
+      }).catch(() => {})
+    );
   }
+  for (const uid of removedIds) {
+    const p = profileMap.get(uid);
+    if (p) emailPromises.push(
+      sendTaskCancelledEmail({
+        to: p.email, assigneeName: p.full_name,
+        apartmentName, taskTitle: 'Čišćenje',
+        dueDate, dueTime: checkOutTime,
+      }).catch(() => {})
+    );
+  }
+
+  await Promise.all(emailPromises);
 
   return json({ success: true });
 };

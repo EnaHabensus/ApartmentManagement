@@ -106,15 +106,16 @@ export const POST: APIRoute = async ({ request, cookies, redirect }) => {
     const profileMap = new Map((profiles ?? []).map((p) => [p.id, p]));
     const dueDate = taskData?.due_date?.split('-').reverse().join('.') ?? '';
 
-    for (const uid of addedIds) {
-      const p = profileMap.get(uid);
-      if (p) sendTaskAssignedEmail({ to: p.email, assigneeName: p.full_name, apartmentName: apt?.name ?? '', taskTitle: taskData?.title ?? '', dueDate, dueTime: taskData?.due_time }).catch(() => {});
-    }
-    for (const uid of removedIds) {
-      const p = profileMap.get(uid);
-      if (p) sendTaskCancelledEmail({ to: p.email, assigneeName: p.full_name, apartmentName: apt?.name ?? '', taskTitle: taskData?.title ?? '', dueDate, dueTime: taskData?.due_time }).catch(() => {});
-    }
-  }
+    await Promise.all([
+      ...addedIds.map((uid) => {
+        const p = profileMap.get(uid);
+        return p ? sendTaskAssignedEmail({ to: p.email, assigneeName: p.full_name, apartmentName: apt?.name ?? '', taskTitle: taskData?.title ?? '', dueDate, dueTime: taskData?.due_time }).catch(() => {}) : Promise.resolve();
+      }),
+      ...removedIds.map((uid) => {
+        const p = profileMap.get(uid);
+        return p ? sendTaskCancelledEmail({ to: p.email, assigneeName: p.full_name, apartmentName: apt?.name ?? '', taskTitle: taskData?.title ?? '', dueDate, dueTime: taskData?.due_time }).catch(() => {}) : Promise.resolve();
+      }),
+    ]);
 
   return redirect('/zadatci?success=updated');
 };
