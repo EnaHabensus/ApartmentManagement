@@ -14,12 +14,15 @@ interface Props {
 const { title, user, isAdmin, activeRoute = '' } = Astro.props;
 
 const adminSupabase = createSupabaseAdminClient();
-const { count: unreadCount } = await adminSupabase
-  .from('notifications')
-  .select('id', { count: 'exact', head: true })
-  .eq('user_id', user.id)
-  .eq('is_read', false)
-  .catch(() => ({ count: 0 })) as { count: number };
+let unreadCount = 0;
+try {
+  const { count } = await adminSupabase
+    .from('notifications')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', user.id)
+    .eq('is_read', false);
+  unreadCount = count ?? 0;
+} catch { /* tablica još ne postoji */ }
 ---
 
 <!DOCTYPE html>
