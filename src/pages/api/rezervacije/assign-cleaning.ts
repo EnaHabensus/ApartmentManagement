@@ -13,7 +13,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
   let body: { reservation_id?: string; user_ids?: string[]; check_out?: string };
   try { body = await request.json(); } catch { return json({ error: 'Invalid JSON.' }, 400); }
 
-  const { reservation_id, user_ids = [], check_out } = body;
+  const { reservation_id, user_ids = [] } = body;
   if (!reservation_id) return json({ error: 'reservation_id nedostaje.' }, 400);
 
   const adminSupabase = createSupabaseAdminClient();
@@ -99,7 +99,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     );
   }
 
-  // Email notifikacije — samo za promjene (fire-and-forget)
+  // Email notifikacije — awaited prije returna (CF Workers terminira worker odmah po return)
   const newIds = new Set(user_ids);
   const addedIds   = user_ids.filter((uid) => !oldIds.has(uid));
   const removedIds = [...oldIds].filter((uid) => !newIds.has(uid));
@@ -114,31 +114,32 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     const profileMap = new Map((profiles ?? []).map((p) => [p.id, p]));
     const dueDate = reservation.check_out.split('-').reverse().join('.');
 
-  // Email notifikacije — awaited prije returna (CF Workers terminira worker odmah po return)
-  const emailPromises: Promise<any>[] = [];
+    const emailPromises: Promise<any>[] = [];
 
-  for (const uid of addedIds) {
-    const p = profileMap.get(uid);
-    if (p) emailPromises.push(
-      sendTaskAssignedEmail({
-        to: p.email, assigneeName: p.full_name,
-        apartmentName, taskTitle: 'Čišćenje',
-        dueDate, dueTime: checkOutTime,
-      }).catch(() => {})
-    );
-  }
-  for (const uid of removedIds) {
-    const p = profileMap.get(uid);
-    if (p) emailPromises.push(
-      sendTaskCancelledEmail({
-        to: p.email, assigneeName: p.full_name,
-        apartmentName, taskTitle: 'Čišćenje',
-        dueDate, dueTime: checkOutTime,
-      }).catch(() => {})
-    );
-  }
+    for (const uid of addedIds) {
+      const p = profileMap.get(uid);
+      if (p) emailPromises.push(
+        sendTaskAssignedEmail({
+          to: p.email, assigneeName: p.full_name,
+          apartmentName, taskTitle: 'Čišćenje',
+          dueDate, dueTime: checkOutTime,
+        }).catch(() => {})
+      );
+    }
 
-  await Promise.all(emailPromises);
+    for (const uid of removedIds) {
+      const p = profileMap.get(uid);
+      if (p) emailPromises.push(
+        sendTaskCancelledEmail({
+          to: p.email, assigneeName: p.full_name,
+          apartmentName, taskTitle: 'Čišćenje',
+          dueDate, dueTime: checkOutTime,
+        }).catch(() => {})
+      );
+    }
+
+    await Promise.all(emailPromises);
+  }
 
   return json({ success: true });
 };

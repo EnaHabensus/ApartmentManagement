@@ -90,7 +90,7 @@ export const POST: APIRoute = async ({ request, cookies, redirect }) => {
     }
   }
 
-  // Pošalji email notifikacije (fire-and-forget)
+  // Pošalji email notifikacije — awaited prije returna (CF Workers)
   const newIds = new Set(new_assignee_ids);
   const addedIds   = new_assignee_ids.filter((uid) => !oldIds.has(uid));
   const removedIds = [...oldIds].filter((uid) => !newIds.has(uid));
@@ -116,6 +116,7 @@ export const POST: APIRoute = async ({ request, cookies, redirect }) => {
         return p ? sendTaskCancelledEmail({ to: p.email, assigneeName: p.full_name, apartmentName: apt?.name ?? '', taskTitle: taskData?.title ?? '', dueDate, dueTime: taskData?.due_time }).catch(() => {}) : Promise.resolve();
       }),
     ]);
+  }
 
   return redirect('/zadatci?success=updated');
 };
