@@ -252,9 +252,9 @@ function nights(ci: string, co: string) {
           { label: 'Ukupno rezervacija', value: String(activeRez.length) },
           { label: 'Završene smjene', value: String(completedCount) },
         ].map(({ label, value }) => (
-          <div class="card p-3 md:p-4 flex-shrink-0 w-36 md:w-auto snap-start">
-            <p class="text-xs font-medium text-gray-500 mb-1 leading-tight">{label}</p>
-            <p class="text-lg md:text-xl font-bold text-gray-900 truncate">{value}</p>
+          <div class="card p-4 md:p-4 flex-shrink-0 w-44 md:w-auto snap-start">
+            <p class="text-xs font-medium text-gray-500 mb-1.5 leading-tight">{label}</p>
+            <p class="text-2xl md:text-xl font-bold text-gray-900 truncate">{value}</p>
           </div>
         ))}
       </div>
