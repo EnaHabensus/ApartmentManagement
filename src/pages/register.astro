@@ -10,7 +10,7 @@ const error = Astro.url.searchParams.get('error');
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Registracija — Moji Apartmani</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <style>
+    <style is:global>
       @keyframes blob-drift-1 {
         0%, 100% { transform: translate(0px, 0px) scale(1); }
         30%       { transform: translate(28px, -22px) scale(1.04); }
@@ -32,10 +32,10 @@ const error = Astro.url.searchParams.get('error');
         35%       { transform: translate(-18px, -20px) scale(1.05); }
         65%       { transform: translate(16px, 14px) scale(0.97); }
       }
-      .blob-1 { animation: blob-drift-1 24s ease-in-out infinite; }
-      .blob-2 { animation: blob-drift-2 30s ease-in-out infinite; animation-delay: -5s; }
-      .blob-3 { animation: blob-drift-3 22s ease-in-out infinite; animation-delay: -10s; }
-      .blob-4 { animation: blob-drift-4 26s ease-in-out infinite; animation-delay: -16s; }
+      .blob-1 { animation: blob-drift-1 24s ease-in-out infinite; will-change: transform; }
+      .blob-2 { animation: blob-drift-2 30s ease-in-out infinite; animation-delay: -5s; will-change: transform; }
+      .blob-3 { animation: blob-drift-3 22s ease-in-out infinite; animation-delay: -10s; will-change: transform; }
+      .blob-4 { animation: blob-drift-4 26s ease-in-out infinite; animation-delay: -16s; will-change: transform; }
     </style>
   </head>
   <body class="min-h-screen bg-white overflow-hidden relative flex flex-col">

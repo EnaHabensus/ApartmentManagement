@@ -10,7 +10,7 @@ const error = Astro.url.searchParams.get('error');
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Prijava — Moji Apartmani</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <style>
+    <style is:global>
       @keyframes blob-drift-1 {
         0%, 100% { transform: translate(0px, 0px) scale(1); }
         30%       { transform: translate(30px, -25px) scale(1.04); }
@@ -32,10 +32,10 @@ const error = Astro.url.searchParams.get('error');
         35%       { transform: translate(-20px, -22px) scale(1.04); }
         65%       { transform: translate(18px, 16px) scale(0.98); }
       }
-      .blob-1 { animation: blob-drift-1 22s ease-in-out infinite; }
-      .blob-2 { animation: blob-drift-2 28s ease-in-out infinite; }
-      .blob-3 { animation: blob-drift-3 24s ease-in-out infinite; animation-delay: -8s; }
-      .blob-4 { animation: blob-drift-4 20s ease-in-out infinite; animation-delay: -14s; }
+      .blob-1 { animation: blob-drift-1 22s ease-in-out infinite; will-change: transform; }
+      .blob-2 { animation: blob-drift-2 28s ease-in-out infinite; will-change: transform; }
+      .blob-3 { animation: blob-drift-3 24s ease-in-out infinite; animation-delay: -8s; will-change: transform; }
+      .blob-4 { animation: blob-drift-4 20s ease-in-out infinite; animation-delay: -14s; will-change: transform; }
     </style>
   </head>
   <body class="min-h-screen bg-white overflow-hidden relative flex flex-col">
