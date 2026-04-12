@@ -205,32 +205,34 @@ const tabs = [
 
 
     <!-- KPI kartice -->
-    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
-      <a href={`/rezervacije?tab=sve${filterApartmentId ? `&apartment_id=${filterApartmentId}` : ''}`}
-        class={`card p-4 hover:shadow-md transition-shadow ${tab === 'sve' ? 'ring-2 ring-blue-500' : ''}`}>
-        <p class="text-xs font-medium text-gray-500 mb-1">Ukupno</p>
-        <p class="text-xl font-bold text-gray-900">{kpi.sve}</p>
-      </a>
-      <a href={`/rezervacije?tab=u-toku${filterApartmentId ? `&apartment_id=${filterApartmentId}` : ''}`}
-        class={`card p-4 hover:shadow-md transition-shadow ${tab === 'u-toku' ? 'ring-2 ring-blue-500' : ''}`}>
-        <p class="text-xs font-medium text-gray-500 mb-1">U toku</p>
-        <p class="text-xl font-bold text-gray-900">{kpi.uToku}</p>
-      </a>
-      <a href={`/rezervacije?tab=nadolazece${filterApartmentId ? `&apartment_id=${filterApartmentId}` : ''}`}
-        class={`card p-4 hover:shadow-md transition-shadow ${tab === 'nadolazece' ? 'ring-2 ring-blue-500' : ''}`}>
-        <p class="text-xs font-medium text-gray-500 mb-1">Nadolazeće</p>
-        <p class="text-xl font-bold text-gray-900">{kpi.nadolazece}</p>
-      </a>
-      <a href={`/rezervacije?tab=zavrsene${filterApartmentId ? `&apartment_id=${filterApartmentId}` : ''}`}
-        class={`card p-4 hover:shadow-md transition-shadow ${tab === 'zavrsene' ? 'ring-2 ring-blue-500' : ''}`}>
-        <p class="text-xs font-medium text-gray-500 mb-1">Završene</p>
-        <p class="text-xl font-bold text-gray-900">{kpi.zavrsene}</p>
-      </a>
-      <a href={`/rezervacije?tab=otkazane${filterApartmentId ? `&apartment_id=${filterApartmentId}` : ''}`}
-        class={`card p-4 hover:shadow-md transition-shadow ${tab === 'otkazane' ? 'ring-2 ring-blue-500' : ''}`}>
-        <p class="text-xs font-medium text-gray-500 mb-1">Otkazane</p>
-        <p class="text-xl font-bold text-gray-900">{kpi.otkazane}</p>
-      </a>
+    <div class="-mx-4 px-4 md:mx-0 md:px-0 mb-6">
+      <div class="flex overflow-x-auto gap-3 pb-1 snap-x snap-mandatory md:grid md:grid-cols-5 md:gap-4 md:overflow-visible md:pb-0">
+        <a href={`/rezervacije?tab=sve${filterApartmentId ? `&apartment_id=${filterApartmentId}` : ''}`}
+          class={`card px-4 py-5 md:p-4 hover:shadow-md transition-shadow flex-shrink-0 w-44 md:w-auto snap-start ${tab === 'sve' ? 'ring-2 ring-blue-500' : ''}`}>
+          <p class="text-xs font-medium text-gray-500 mb-1.5">Ukupno</p>
+          <p class="text-2xl md:text-xl font-bold text-gray-900">{kpi.sve}</p>
+        </a>
+        <a href={`/rezervacije?tab=u-toku${filterApartmentId ? `&apartment_id=${filterApartmentId}` : ''}`}
+          class={`card px-4 py-5 md:p-4 hover:shadow-md transition-shadow flex-shrink-0 w-44 md:w-auto snap-start ${tab === 'u-toku' ? 'ring-2 ring-blue-500' : ''}`}>
+          <p class="text-xs font-medium text-gray-500 mb-1.5">U toku</p>
+          <p class="text-2xl md:text-xl font-bold text-gray-900">{kpi.uToku}</p>
+        </a>
+        <a href={`/rezervacije?tab=nadolazece${filterApartmentId ? `&apartment_id=${filterApartmentId}` : ''}`}
+          class={`card px-4 py-5 md:p-4 hover:shadow-md transition-shadow flex-shrink-0 w-44 md:w-auto snap-start ${tab === 'nadolazece' ? 'ring-2 ring-blue-500' : ''}`}>
+          <p class="text-xs font-medium text-gray-500 mb-1.5">Nadolazeće</p>
+          <p class="text-2xl md:text-xl font-bold text-gray-900">{kpi.nadolazece}</p>
+        </a>
+        <a href={`/rezervacije?tab=zavrsene${filterApartmentId ? `&apartment_id=${filterApartmentId}` : ''}`}
+          class={`card px-4 py-5 md:p-4 hover:shadow-md transition-shadow flex-shrink-0 w-44 md:w-auto snap-start ${tab === 'zavrsene' ? 'ring-2 ring-blue-500' : ''}`}>
+          <p class="text-xs font-medium text-gray-500 mb-1.5">Završene</p>
+          <p class="text-2xl md:text-xl font-bold text-gray-900">{kpi.zavrsene}</p>
+        </a>
+        <a href={`/rezervacije?tab=otkazane${filterApartmentId ? `&apartment_id=${filterApartmentId}` : ''}`}
+          class={`card px-4 py-5 md:p-4 hover:shadow-md transition-shadow flex-shrink-0 w-44 md:w-auto snap-start ${tab === 'otkazane' ? 'ring-2 ring-blue-500' : ''}`}>
+          <p class="text-xs font-medium text-gray-500 mb-1.5">Otkazane</p>
+          <p class="text-2xl md:text-xl font-bold text-gray-900">{kpi.otkazane}</p>
+        </a>
+      </div>
     </div>
 
     <!-- Filteri i tabovi -->
