@@ -178,6 +178,7 @@ const { data: allCleaningData } = allRezIdList.length > 0
   : { data: [] };
 const cleaningCountMap: Record<string, number> = {};
 for (const c of (allCleaningData ?? [])) {
+  if (!c.user_id) continue; // preskoči vanjske suradnike (nemaju profil)
   cleaningCountMap[c.user_id] = (cleaningCountMap[c.user_id] ?? 0) + 1;
 }
 const cleaningStatUserIds = Object.keys(cleaningCountMap);
