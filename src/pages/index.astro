@@ -174,19 +174,37 @@ const { data: allRezForCleaning } = await adminSupabase
   .eq('status', 'active');
 const allRezIdList = (allRezForCleaning ?? []).map((r) => r.id);
 const { data: allCleaningData } = allRezIdList.length > 0
-  ? await adminSupabase.from('reservation_cleaning').select('user_id').in('reservation_id', allRezIdList)
+  ? await adminSupabase.from('reservation_cleaning').select('user_id, external_member_id').in('reservation_id', allRezIdList)
   : { data: [] };
-const cleaningCountMap: Record<string, number> = {};
+
+const cleaningUserCountMap: Record<string, number> = {};
+const cleaningExtCountMap: Record<string, number> = {};
 for (const c of (allCleaningData ?? [])) {
-  if (!c.user_id) continue; // preskoči vanjske suradnike (nemaju profil)
-  cleaningCountMap[c.user_id] = (cleaningCountMap[c.user_id] ?? 0) + 1;
+  if (c.user_id) {
+    cleaningUserCountMap[c.user_id] = (cleaningUserCountMap[c.user_id] ?? 0) + 1;
+  } else if (c.external_member_id) {
+    cleaningExtCountMap[c.external_member_id] = (cleaningExtCountMap[c.external_member_id] ?? 0) + 1;
+  }
 }
-const cleaningStatUserIds = Object.keys(cleaningCountMap);
+
+const cleaningStatUserIds = Object.keys(cleaningUserCountMap);
+const cleaningStatExtIds = Object.keys(cleaningExtCountMap);
+
 const { data: cleaningStatProfiles } = cleaningStatUserIds.length > 0
   ? await adminSupabase.from('profiles').select('id, full_name').in('id', cleaningStatUserIds)
   : { data: [] };
-const cleaningLabels = (cleaningStatProfiles ?? []).map((p) => p.full_name);
-const cleaningValues = (cleaningStatProfiles ?? []).map((p) => cleaningCountMap[p.id] ?? 0);
+const { data: cleaningStatExtMembers } = cleaningStatExtIds.length > 0
+  ? await adminSupabase.from('external_members').select('id, name').in('id', cleaningStatExtIds)
+  : { data: [] };
+
+const cleaningLabels = [
+  ...(cleaningStatProfiles ?? []).map((p) => p.full_name),
+  ...(cleaningStatExtMembers ?? []).map((e: any) => e.name),
+];
+const cleaningValues = [
+  ...(cleaningStatProfiles ?? []).map((p) => cleaningUserCountMap[p.id] ?? 0),
+  ...(cleaningStatExtMembers ?? []).map((e: any) => cleaningExtCountMap[e.id] ?? 0),
+];
 
 function formatDate(d: string) {
   const [y, m, day] = d.split('-');
