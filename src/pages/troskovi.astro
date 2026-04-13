@@ -189,15 +189,15 @@ function formatCurrency(n: number): string {
                   class="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium whitespace-nowrap mb-2"
                   style={`background-color: ${color}20; color: ${color}; box-shadow: inset 0 0 0 1px ${color}40`}
                 >{aptNameMap.get(e.apartment_id) ?? '—'}</span>
-                <!-- Redak 2: kategorija badge + naziv troška -->
-                <div class="flex items-center gap-2 mb-2">
+                <!-- Redak 2: naziv troška lijevo + kategorija badge desno -->
+                <div class="flex items-center justify-between gap-2 mb-2">
+                  <p class="font-semibold text-slate-900 truncate">{e.title}</p>
                   {cat ? (
                     <span
                       class="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium whitespace-nowrap flex-shrink-0"
                       style={`background-color: ${cat.color}20; color: ${cat.color}; box-shadow: inset 0 0 0 1px ${cat.color}40`}
                     >{cat.name}</span>
                   ) : null}
-                  <p class="font-semibold text-slate-900 truncate">{e.title}</p>
                 </div>
                 <!-- Redak 3: datum -->
                 <p class="text-sm text-slate-500 mb-2">{formatDate(e.expense_date)}</p>
