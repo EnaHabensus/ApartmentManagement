@@ -82,22 +82,59 @@ function formatCurrency(n: number | null): string {
   if (n === null || n === undefined) return '—';
   return new Intl.NumberFormat('hr-HR', { style: 'currency', currency: 'EUR' }).format(n);
 }
+
+function calcNocenja(checkIn: string, checkOut: string): number {
+  return Math.round((new Date(checkOut).getTime() - new Date(checkIn).getTime()) / 86400000);
+}
 ---
 
 <AppLayout title="Računi" user={profile} isAdmin={true} activeRoute="/racuni">
-  <div class="p-6 max-w-7xl mx-auto">
+  <div class="p-4 md:p-6 max-w-7xl mx-auto">
 
     <!-- Header -->
-    <div class="flex items-center justify-between mb-6">
+    <div class="flex flex-wrap items-start justify-between gap-3 mb-4">
       <div>
-        <h1 class="text-2xl font-bold text-gray-900">Računi</h1>
-        <p class="text-gray-500 text-sm mt-1">{reservations.length} rezervacij{reservations.length === 1 ? 'a' : 'a'}</p>
+        <h1 class="text-xl md:text-2xl font-bold text-gray-900">Računi</h1>
+        <p class="text-gray-500 text-sm mt-0.5">{reservations.length} rezervacij{reservations.length === 1 ? 'a' : 'a'}</p>
       </div>
+      <!-- Filter apartmana -->
+      {adminApartments.length > 1 && (
+        <form method="GET" action="/racuni" id="filter-form">
+          <input type="hidden" name="tab" value={activeTab} />
+          <select
+            name="apartment_id"
+            onchange="document.getElementById('filter-form').submit()"
+            class="input text-sm w-auto"
+          >
+            <option value="">Svi apartmani</option>
+            {adminApartments.map((apt) => (
+              <option value={apt.id} selected={filterApartmentId === apt.id}>{apt.name}</option>
+            ))}
+          </select>
+        </form>
+      )}
     </div>
 
-    <!-- Tabovi i filter -->
-    <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
-      <div class="flex gap-1 bg-gray-100 rounded-lg p-1">
+    <!-- Tabovi: dropdown na mobitelu, pills na desktopu -->
+    <div class="mb-4 flex flex-wrap items-center gap-3">
+      <!-- Mobile dropdown -->
+      <select
+        class="input w-full md:hidden"
+        onchange="window.location.href=this.value"
+      >
+        {[
+          { key: 'sve', label: 'Sve' },
+          { key: 'izdani', label: 'Izdani računi' },
+          { key: 'za_izdati', label: 'Za izdati' },
+        ].map((t) => (
+          <option
+            value={`/racuni?tab=${t.key}${filterApartmentId ? `&apartment_id=${filterApartmentId}` : ''}`}
+            selected={activeTab === t.key}
+          >{t.label}</option>
+        ))}
+      </select>
+      <!-- Desktop pills -->
+      <div class="hidden md:flex gap-1 bg-gray-100 rounded-lg p-1">
         {[
           { key: 'sve', label: 'Sve' },
           { key: 'izdani', label: 'Izdani računi' },
@@ -111,22 +148,8 @@ function formatCurrency(n: number | null): string {
           >{t.label}</a>
         ))}
       </div>
-      <form method="GET" action="/racuni" id="filter-form">
-        <input type="hidden" name="tab" value={activeTab} />
-        <select
-          name="apartment_id"
-          onchange="document.getElementById('filter-form').submit()"
-          class="input py-1.5 text-sm w-auto"
-        >
-          <option value="">Svi apartmani</option>
-          {adminApartments.map((apt) => (
-            <option value={apt.id} selected={filterApartmentId === apt.id}>{apt.name}</option>
-          ))}
-        </select>
-      </form>
     </div>
 
-    <!-- Tablica -->
     {reservations.length === 0 ? (
       <div class="card p-12 text-center">
         <div class="text-gray-400 mb-4">
@@ -143,84 +166,147 @@ function formatCurrency(n: number | null): string {
         </p>
       </div>
     ) : (
-      <div class="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
-        <table class="text-sm" style="min-width: 900px; width: 100%;">
-          <thead>
-            <tr>
-              <th class="table-head px-4 py-3 text-left">Gost</th>
-              <th class="table-head px-4 py-3 text-left">Apartman</th>
-              <th class="table-head px-4 py-3 text-left whitespace-nowrap">Check-in</th>
-              <th class="table-head px-4 py-3 text-left whitespace-nowrap">Check-out</th>
-              <th class="table-head px-4 py-3 text-right">Iznos</th>
-              <th class="table-head px-4 py-3 text-left whitespace-nowrap">Broj računa</th>
-              <th class="table-head px-4 py-3 text-left">Akcije</th>
-            </tr>
-          </thead>
-          <tbody class="divide-y divide-gray-100">
-            {reservations.map((r) => {
-              const invoice = invoiceByReservation.get(r.id);
-              const color = aptColorMap.get(r.apartment_id) ?? '#3B82F6';
-              const aptName = aptNameMap.get(r.apartment_id) ?? '—';
-              const lastInvoice = lastInvoiceByApt.get(r.apartment_id) ?? null;
-              const lastInvoiceNote = lastInvoice
-                ? `Zadnji izdani račun za ${aptName} je broj ${lastInvoice}`
-                : `Za ${aptName} još nisu izdani računi`;
-              return (
-                <tr class="table-row">
-                  <td class="table-cell font-medium text-gray-900 whitespace-nowrap">{r.guest_name}</td>
-                  <td class="table-cell">
-                    <span
-                      class="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium whitespace-nowrap"
-                      style={`background-color: ${color}20; color: ${color}; box-shadow: inset 0 0 0 1px ${color}40`}
-                    >{aptName}</span>
-                  </td>
-                  <td class="table-cell text-gray-600 whitespace-nowrap">{formatDate(r.check_in)}</td>
-                  <td class="table-cell text-gray-600 whitespace-nowrap">{formatDate(r.check_out)}</td>
-                  <td class="table-cell text-right font-medium text-gray-900">{formatCurrency(r.amount_gross)}</td>
-                  <td class="table-cell">
-                    {invoice
-                      ? invoice.pdf_url
-                        ? (
-                          <a
-                            href={invoice.pdf_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            class="font-medium text-blue-600 hover:text-blue-800 hover:underline"
-                          >{invoice.invoice_number_display}</a>
-                        )
-                        : <span class="font-medium text-gray-900">{invoice.invoice_number_display}</span>
-                      : <span class="text-gray-400">—</span>
-                    }
-                  </td>
-                  <td class="table-cell">
-                    <div class="flex items-center gap-1 flex-wrap">
-                      {invoice ? (
-                        <button
-                          onclick={`confirmDelete('${invoice.id}')`}
-                          class="btn-ghost text-xs px-2 py-1 whitespace-nowrap text-red-600 hover:text-red-800 hover:bg-red-50"
-                        >Obriši račun</button>
-                      ) : (
-                        <>
-                          <button
-                            onclick={`openGenerateModal('${r.id}', '${r.guest_name.replace(/'/g, "\\'")}', ${JSON.stringify(lastInvoiceNote)})`}
-                            class="btn-primary text-xs px-2 py-1 whitespace-nowrap"
-                          >Generiraj račun</button>
-                          <button
-                            onclick={`openUploadModal('__new__', '${r.id}')`}
-                            class="btn-ghost text-xs px-2 py-1 whitespace-nowrap"
-                          >Uploadaj račun</button>
-                        </>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+      <>
+        <!-- Mobile: kartice -->
+        <div class="md:hidden space-y-3">
+          {reservations.map((r) => {
+            const invoice = invoiceByReservation.get(r.id);
+            const color = aptColorMap.get(r.apartment_id) ?? '#3B82F6';
+            const aptName = aptNameMap.get(r.apartment_id) ?? '—';
+            const lastInvoice = lastInvoiceByApt.get(r.apartment_id) ?? null;
+            const lastInvoiceNote = lastInvoice
+              ? `Zadnji izdani račun za ${aptName} je broj ${lastInvoice}`
+              : `Za ${aptName} još nisu izdani računi`;
+            const nocenja = calcNocenja(r.check_in, r.check_out);
+            const racunData = JSON.stringify({
+              id: r.id, guest_name: r.guest_name,
+              apt_name: aptName, apt_color: color,
+              check_in: r.check_in, check_out: r.check_out,
+              amount_gross: r.amount_gross ?? 0, nocenja,
+              invoice_id: invoice?.id ?? null,
+              invoice_number: invoice?.invoice_number_display ?? null,
+              invoice_pdf_url: invoice?.pdf_url ?? null,
+              last_invoice_note: lastInvoiceNote,
+            });
+            return (
+              <div
+                class="card p-4 cursor-pointer active:bg-slate-50 transition-colors"
+                data-racun={racunData}
+                onclick="openRacunDrawer(this)"
+              >
+                {/* Apt badge */}
+                <span
+                  class="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium whitespace-nowrap mb-1.5"
+                  style={`background-color:${color}20;color:${color};box-shadow:inset 0 0 0 1px ${color}40`}
+                >{aptName}</span>
+
+                {/* Ime gosta */}
+                <p class="font-semibold text-slate-900 truncate mb-1">{r.guest_name}</p>
+
+                {/* Datumi + noćenja */}
+                <p class="text-sm text-slate-500 mb-3">
+                  {formatDate(r.check_in)} → {formatDate(r.check_out)}
+                  <span class="text-slate-400 ml-1">· {nocenja === 1 ? '1 noć' : `${nocenja} noćenja`}</span>
+                </p>
+
+                {/* Status računa */}
+                <div class="flex items-center gap-2 mb-3">
+                  <div class={`h-2 w-2 rounded-full flex-shrink-0 ${invoice ? 'bg-green-500' : 'bg-slate-300'}`}></div>
+                  <span class={`text-sm ${invoice ? 'text-slate-700' : 'text-slate-400'}`}>
+                    {invoice ? `Račun: ${invoice.invoice_number_display}` : 'Račun nije izdan'}
+                  </span>
+                </div>
+
+                {/* Detalji */}
+                <div class="flex items-center gap-0.5 text-blue-600 justify-end">
+                  <span class="text-xs font-medium">Detalji</span>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <!-- Desktop: tablica -->
+        <div class="hidden md:block overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
+          <table class="text-sm" style="min-width: 900px; width: 100%;">
+            <thead>
+              <tr>
+                <th class="table-head px-4 py-3 text-left">Gost</th>
+                <th class="table-head px-4 py-3 text-left">Apartman</th>
+                <th class="table-head px-4 py-3 text-left whitespace-nowrap">Check-in</th>
+                <th class="table-head px-4 py-3 text-left whitespace-nowrap">Check-out</th>
+                <th class="table-head px-4 py-3 text-right">Iznos</th>
+                <th class="table-head px-4 py-3 text-left whitespace-nowrap">Broj računa</th>
+                <th class="table-head px-4 py-3 text-left">Akcije</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+              {reservations.map((r) => {
+                const invoice = invoiceByReservation.get(r.id);
+                const color = aptColorMap.get(r.apartment_id) ?? '#3B82F6';
+                const aptName = aptNameMap.get(r.apartment_id) ?? '—';
+                const lastInvoice = lastInvoiceByApt.get(r.apartment_id) ?? null;
+                const lastInvoiceNote = lastInvoice
+                  ? `Zadnji izdani račun za ${aptName} je broj ${lastInvoice}`
+                  : `Za ${aptName} još nisu izdani računi`;
+                return (
+                  <tr class="table-row">
+                    <td class="table-cell font-medium text-gray-900 whitespace-nowrap">{r.guest_name}</td>
+                    <td class="table-cell">
+                      <span
+                        class="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium whitespace-nowrap"
+                        style={`background-color: ${color}20; color: ${color}; box-shadow: inset 0 0 0 1px ${color}40`}
+                      >{aptName}</span>
+                    </td>
+                    <td class="table-cell text-gray-600 whitespace-nowrap">{formatDate(r.check_in)}</td>
+                    <td class="table-cell text-gray-600 whitespace-nowrap">{formatDate(r.check_out)}</td>
+                    <td class="table-cell text-right font-medium text-gray-900">{formatCurrency(r.amount_gross)}</td>
+                    <td class="table-cell">
+                      {invoice
+                        ? invoice.pdf_url
+                          ? <a href={invoice.pdf_url} target="_blank" rel="noopener noreferrer" class="font-medium text-blue-600 hover:underline">{invoice.invoice_number_display}</a>
+                          : <span class="font-medium text-gray-900">{invoice.invoice_number_display}</span>
+                        : <span class="text-gray-400">—</span>
+                      }
+                    </td>
+                    <td class="table-cell">
+                      <div class="flex items-center gap-1 flex-wrap">
+                        {invoice ? (
+                          <button onclick={`confirmDelete('${invoice.id}')`} class="btn-ghost text-xs px-2 py-1 whitespace-nowrap text-red-600 hover:text-red-800 hover:bg-red-50">Obriši račun</button>
+                        ) : (
+                          <>
+                            <button onclick={`openGenerateModal('${r.id}', '${r.guest_name.replace(/'/g, "\\'")}', ${JSON.stringify(lastInvoiceNote)})`} class="btn-primary text-xs px-2 py-1 whitespace-nowrap">Generiraj račun</button>
+                            <button onclick={`openUploadModal('__new__', '${r.id}')`} class="btn-ghost text-xs px-2 py-1 whitespace-nowrap">Uploadaj račun</button>
+                          </>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </>
     )}
   </div>
+
+  <!-- Bottom drawer — mobile only -->
+  <div
+    id="racun-drawer"
+    class="fixed inset-x-0 bottom-0 z-50 bg-white rounded-t-2xl shadow-2xl translate-y-full transition-transform duration-300 ease-out md:hidden flex flex-col"
+    style="max-height: 90dvh;"
+  >
+    <div class="flex-shrink-0 relative flex items-center justify-center px-4 pt-3 pb-3 border-b border-slate-100">
+      <div class="w-10 h-1 rounded-full bg-slate-200"></div>
+      <button onclick="closeRacunDrawer()" class="absolute right-3 p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors">
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+      </button>
+    </div>
+    <div id="racun-drawer-body" class="flex-1 overflow-y-auto px-4 pt-4 pb-10"></div>
+  </div>
+  <div id="racun-drawer-overlay" class="hidden fixed inset-0 z-40 bg-black/40 md:hidden" onclick="closeRacunDrawer()"></div>
 
   <!-- Modal: Generiraj račun -->
   <div id="modal-generate" class="hidden modal-overlay" onclick="closeModalOnOverlay(event, 'modal-generate')">
@@ -294,6 +380,114 @@ function formatCurrency(n: number | null): string {
 </AppLayout>
 
 <script>
+  // ── Drawer ────────────────────────────────────────────────────────────────
+
+  function fmtDate(d: string): string {
+    const [y, m, day] = d.split('-'); return `${day}.${m}.${y}`;
+  }
+  function fmtEur(n: number): string {
+    return new Intl.NumberFormat('hr-HR', { style: 'currency', currency: 'EUR' }).format(n);
+  }
+
+  function renderRacunDrawerContent(r: any): string {
+    const nocLabel = r.nocenja === 1 ? '1 noć' : `${r.nocenja} noćenja`;
+
+    const invoiceHtml = r.invoice_id
+      ? `<div class="flex items-center gap-2">
+          <div class="h-2 w-2 rounded-full bg-green-500 flex-shrink-0"></div>
+          ${r.invoice_pdf_url
+            ? `<a href="${r.invoice_pdf_url}" target="_blank" rel="noopener noreferrer" class="text-sm font-medium text-blue-600 hover:underline">${r.invoice_number}</a>`
+            : `<span class="text-sm font-medium text-slate-700">${r.invoice_number}</span>`
+          }
+        </div>`
+      : `<div class="flex items-center gap-2">
+          <div class="h-2 w-2 rounded-full bg-slate-300 flex-shrink-0"></div>
+          <span class="text-sm text-slate-400">Račun nije izdan</span>
+        </div>`;
+
+    const actionsHtml = r.invoice_id
+      ? `<button onclick="deleteFromDrawer('${r.invoice_id}')"
+           class="w-full rounded-xl border border-red-200 py-3 text-sm font-semibold text-red-600 hover:bg-red-50 transition-colors">
+           Obriši račun
+         </button>`
+      : `<div class="flex flex-col gap-2">
+           <button onclick="generateFromDrawer('${r.id}', ${JSON.stringify(r.guest_name)}, ${JSON.stringify(r.last_invoice_note)})"
+             class="w-full rounded-xl bg-blue-600 py-3 text-sm font-semibold text-white">
+             Generiraj račun
+           </button>
+           <button onclick="uploadFromDrawer('${r.id}')"
+             class="w-full rounded-xl border border-slate-200 py-3 text-sm font-semibold text-slate-700">
+             Uploadaj PDF računa
+           </button>
+         </div>`;
+
+    return `
+      <h3 class="text-lg font-bold text-slate-900 mb-1">${r.guest_name}</h3>
+      <span class="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium mb-5"
+        style="background-color:${r.apt_color}20;color:${r.apt_color};box-shadow:inset 0 0 0 1px ${r.apt_color}40">
+        ${r.apt_name}
+      </span>
+
+      <div class="grid grid-cols-3 gap-2 mb-5">
+        <div class="bg-slate-50 rounded-xl p-3 text-center">
+          <p class="text-xs text-slate-400 mb-1">Check-in</p>
+          <p class="text-sm font-semibold text-slate-800">${fmtDate(r.check_in)}</p>
+        </div>
+        <div class="bg-slate-50 rounded-xl p-3 text-center">
+          <p class="text-xs text-slate-400 mb-1">Check-out</p>
+          <p class="text-sm font-semibold text-slate-800">${fmtDate(r.check_out)}</p>
+        </div>
+        <div class="bg-slate-50 rounded-xl p-3 text-center">
+          <p class="text-xs text-slate-400 mb-1">Iznos</p>
+          <p class="text-sm font-semibold text-slate-800">${fmtEur(r.amount_gross)}</p>
+        </div>
+      </div>
+
+      <p class="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">Račun</p>
+      <div class="mb-5">${invoiceHtml}</div>
+
+      ${actionsHtml}
+    `;
+  }
+
+  function openRacunDrawer(el: HTMLElement) {
+    const r = JSON.parse((el as HTMLElement).dataset.racun || '{}');
+    const body = document.getElementById('racun-drawer-body');
+    if (body) body.innerHTML = renderRacunDrawerContent(r);
+    document.getElementById('racun-drawer')?.classList.remove('translate-y-full');
+    document.getElementById('racun-drawer-overlay')?.classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+  }
+
+  function closeRacunDrawer() {
+    document.getElementById('racun-drawer')?.classList.add('translate-y-full');
+    document.getElementById('racun-drawer-overlay')?.classList.add('hidden');
+    document.body.style.overflow = '';
+  }
+
+  function generateFromDrawer(rezId: string, guestName: string, lastNote: string) {
+    closeRacunDrawer();
+    setTimeout(() => openGenerateModal(rezId, guestName, lastNote), 300);
+  }
+
+  function uploadFromDrawer(rezId: string) {
+    closeRacunDrawer();
+    setTimeout(() => openUploadModal('__new__', rezId), 300);
+  }
+
+  function deleteFromDrawer(invoiceId: string) {
+    closeRacunDrawer();
+    setTimeout(() => confirmDelete(invoiceId), 300);
+  }
+
+  window.openRacunDrawer  = openRacunDrawer;
+  window.closeRacunDrawer = closeRacunDrawer;
+  window.generateFromDrawer = generateFromDrawer;
+  window.uploadFromDrawer   = uploadFromDrawer;
+  window.deleteFromDrawer   = deleteFromDrawer;
+
+  // ─────────────────────────────────────────────────────────────────────────
+
   function closeModalOnOverlay(event: MouseEvent, id: string) {
     if (event.target === document.getElementById(id)) document.getElementById(id)?.classList.add('hidden');
   }
