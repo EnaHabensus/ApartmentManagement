@@ -82,51 +82,62 @@ function formatEur(n: number): string {
 ---
 
 <AppLayout title="Financije" user={profile} isAdmin={true} activeRoute="/financije">
-  <div class="p-6 max-w-7xl mx-auto">
+  <div class="p-4 md:p-6 max-w-7xl mx-auto">
 
     <!-- Header -->
-    <div class="flex items-center justify-between mb-6">
+    <div class="flex flex-wrap items-start justify-between gap-3 mb-6">
       <div>
-        <h1 class="text-2xl font-bold text-gray-900">Financije</h1>
-        <p class="text-gray-500 text-sm mt-1">{rez.length} rezervacij{rez.length === 1 ? 'a' : rez.length < 5 ? 'e' : 'a'}</p>
+        <h1 class="text-xl md:text-2xl font-bold text-gray-900">Financije</h1>
+        <p class="text-gray-500 text-sm mt-0.5">{rez.length} rezervacij{rez.length === 1 ? 'a' : rez.length < 5 ? 'e' : 'a'}</p>
+      </div>
+
+      <div class="flex flex-wrap items-center gap-2">
+        <!-- Filter perioda -->
+        <form method="GET" id="form-period">
+          <input type="hidden" name="apartment_id" value={filterApartmentId} />
+          <select
+            name="period"
+            onchange="document.getElementById('form-period').submit()"
+            class="input text-sm w-auto"
+          >
+            <option value="all" selected={period === 'all'}>Od početka</option>
+            <option value="this_month" selected={period === 'this_month'}>Ovaj mjesec</option>
+            <option value="last_month" selected={period === 'last_month'}>Prethodni mjesec</option>
+            <option value="custom" selected={period === 'custom'}>Po datumu</option>
+          </select>
+        </form>
+
+        <!-- Custom datumi (vidljivi samo kad period=custom) -->
+        {period === 'custom' && (
+          <form method="GET" id="form-custom" class="flex items-center gap-2">
+            <input type="hidden" name="period" value="custom" />
+            <input type="hidden" name="apartment_id" value={filterApartmentId} />
+            <input name="date_from" type="date" value={dateFrom} class="input text-sm" />
+            <input name="date_to" type="date" value={dateTo} class="input text-sm" />
+            <button type="submit" class="btn-primary text-sm px-3">Primijeni</button>
+          </form>
+        )}
+
+        <!-- Filter apartmana -->
+        {allApartments.length > 1 && (
+          <form method="GET" id="form-apt">
+            <input type="hidden" name="period" value={period} />
+            {period === 'custom' && <input type="hidden" name="date_from" value={dateFrom} />}
+            {period === 'custom' && <input type="hidden" name="date_to" value={dateTo} />}
+            <select
+              name="apartment_id"
+              onchange="document.getElementById('form-apt').submit()"
+              class="input text-sm w-auto"
+            >
+              <option value="">Svi apartmani</option>
+              {allApartments.map((apt) => (
+                <option value={apt.id} selected={filterApartmentId === apt.id}>{apt.name}</option>
+              ))}
+            </select>
+          </form>
+        )}
       </div>
     </div>
-
-    <!-- Filteri -->
-    <form method="GET" action="/financije" id="filter-form" class="card p-4 mb-6 flex flex-wrap items-end gap-4">
-      <div>
-        <label class="label">Period</label>
-        <select name="period" onchange="onPeriodChange(this.value)" class="input w-auto">
-          <option value="all" selected={period === 'all'}>Od početka</option>
-          <option value="this_month" selected={period === 'this_month'}>Ovaj mjesec</option>
-          <option value="last_month" selected={period === 'last_month'}>Prethodni mjesec</option>
-          <option value="custom" selected={period === 'custom'}>Po datumu</option>
-        </select>
-      </div>
-
-      <div id="custom-dates" class={`flex gap-3 ${period !== 'custom' ? 'hidden' : ''}`}>
-        <div>
-          <label class="label">Od</label>
-          <input name="date_from" type="date" value={dateFrom} class="input" />
-        </div>
-        <div>
-          <label class="label">Do</label>
-          <input name="date_to" type="date" value={dateTo} class="input" />
-        </div>
-      </div>
-
-      <div>
-        <label class="label">Apartman</label>
-        <select name="apartment_id" class="input w-auto">
-          <option value="">Svi apartmani</option>
-          {allApartments.map((apt) => (
-            <option value={apt.id} selected={filterApartmentId === apt.id}>{apt.name}</option>
-          ))}
-        </select>
-      </div>
-
-      <button type="submit" class="btn-primary">Primijeni</button>
-    </form>
 
     <!-- KPI kartice -->
     <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
@@ -226,11 +237,6 @@ function formatEur(n: number): string {
 </AppLayout>
 
 <script>
-  function onPeriodChange(val: string) {
-    const el = document.getElementById('custom-dates');
-    if (el) el.classList.toggle('hidden', val !== 'custom');
-  }
-
   function showToast(message: string, type: 'success' | 'error' = 'success') {
     const toast = document.getElementById('toast');
     if (!toast) return;
@@ -295,6 +301,5 @@ function formatEur(n: number): string {
     }
   }
 
-  window.onPeriodChange = onPeriodChange;
   window.togglePaid = togglePaid;
 </script>
