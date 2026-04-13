@@ -184,34 +184,32 @@ function formatCurrency(n: number): string {
                 })}
                 onclick="openExpenseDrawer(this)"
               >
-                <!-- Redak 1: kategorija + apartman badge -->
-                <div class="flex items-center justify-between gap-2 mb-2">
+                <!-- Redak 1: apartman badge lijevo -->
+                <span
+                  class="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium whitespace-nowrap mb-2"
+                  style={`background-color: ${color}20; color: ${color}; box-shadow: inset 0 0 0 1px ${color}40`}
+                >{aptNameMap.get(e.apartment_id) ?? '—'}</span>
+                <!-- Redak 2: kategorija badge + naziv troška -->
+                <div class="flex items-center gap-2 mb-2">
                   {cat ? (
                     <span
-                      class="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium truncate max-w-[140px]"
+                      class="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium whitespace-nowrap flex-shrink-0"
                       style={`background-color: ${cat.color}20; color: ${cat.color}; box-shadow: inset 0 0 0 1px ${cat.color}40`}
                     >{cat.name}</span>
-                  ) : (
-                    <span class="text-xs text-gray-400">Bez kategorije</span>
-                  )}
-                  <span
-                    class="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium whitespace-nowrap"
-                    style={`background-color: ${color}20; color: ${color}; box-shadow: inset 0 0 0 1px ${color}40`}
-                  >{aptNameMap.get(e.apartment_id) ?? '—'}</span>
+                  ) : null}
+                  <p class="font-semibold text-slate-900 truncate">{e.title}</p>
                 </div>
-                <!-- Redak 2: naziv -->
-                <p class="font-semibold text-slate-900 truncate mb-2">{e.title}</p>
-                <!-- Redak 3: datum + iznos -->
-                <div class="flex items-center justify-between mb-2">
-                  <span class="text-sm text-slate-500">{formatDate(e.expense_date)}</span>
+                <!-- Redak 3: datum -->
+                <p class="text-sm text-slate-500 mb-2">{formatDate(e.expense_date)}</p>
+                <!-- Redak 4: iznos lijevo + detalji desno -->
+                <div class="flex items-center justify-between">
                   <span class="text-sm font-semibold text-slate-900">{formatCurrency(e.amount)}</span>
-                </div>
-                <!-- Redak 4: detalji link -->
-                <div class="flex items-center gap-0.5 text-blue-600 justify-end">
-                  <span class="text-xs font-medium">Detalji</span>
-                  <svg class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
-                    <path fill-rule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clip-rule="evenodd" />
-                  </svg>
+                  <div class="flex items-center gap-0.5 text-blue-600">
+                    <span class="text-xs font-medium">Detalji</span>
+                    <svg class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
+                      <path fill-rule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clip-rule="evenodd" />
+                    </svg>
+                  </div>
                 </div>
               </div>
             );
