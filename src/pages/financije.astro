@@ -144,22 +144,24 @@ function calcNocenja(checkIn: string, checkOut: string): number {
     </div>
 
     <!-- KPI kartice -->
-    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-      <div class="card p-4">
-        <p class="text-xs font-medium text-gray-500 mb-1">Bruto (EUR)</p>
-        <p class="text-xl font-bold text-gray-900">{formatEur(bruto)}</p>
+    <div class="-mx-4 px-4 md:mx-0 md:px-0 mb-6">
+      <div class="flex overflow-x-auto gap-3 py-1 px-1 snap-x snap-mandatory md:grid md:grid-cols-4 md:gap-4 md:overflow-visible md:py-0 md:px-0">
+      <div class="card px-4 py-5 md:p-4 flex-shrink-0 w-44 md:w-auto snap-start">
+        <p class="text-xs font-medium text-gray-500 mb-1.5">Bruto</p>
+        <p class="text-2xl md:text-xl font-bold text-gray-900">{formatEur(bruto)}</p>
       </div>
-      <div class="card p-4">
-        <p class="text-xs font-medium text-gray-500 mb-1">Neto (EUR)</p>
-        <p class="text-xl font-bold text-gray-900">{formatEur(neto)}</p>
+      <div class="card px-4 py-5 md:p-4 flex-shrink-0 w-44 md:w-auto snap-start">
+        <p class="text-xs font-medium text-gray-500 mb-1.5">Neto</p>
+        <p class="text-2xl md:text-xl font-bold text-gray-900">{formatEur(neto)}</p>
       </div>
-      <div class="card p-4">
-        <p class="text-xs font-medium text-gray-500 mb-1">Provizija (EUR)</p>
-        <p class="text-xl font-bold text-gray-900">{formatEur(provizija)}</p>
+      <div class="card px-4 py-5 md:p-4 flex-shrink-0 w-44 md:w-auto snap-start">
+        <p class="text-xs font-medium text-gray-500 mb-1.5">Provizija</p>
+        <p class="text-2xl md:text-xl font-bold text-gray-900">{formatEur(provizija)}</p>
       </div>
-      <div class="card p-4">
-        <p class="text-xs font-medium text-gray-500 mb-1">Zaprimljeno (EUR)</p>
-        <p class="text-xl font-bold text-green-600" id="kpi-zaprimljeno">{formatEur(zaprimljeno)}</p>
+      <div class="card px-4 py-5 md:p-4 flex-shrink-0 w-44 md:w-auto snap-start">
+        <p class="text-xs font-medium text-gray-500 mb-1.5">Zaprimljeno</p>
+        <p class="text-2xl md:text-xl font-bold text-green-600" id="kpi-zaprimljeno">{formatEur(zaprimljeno)}</p>
+      </div>
       </div>
     </div>
 
