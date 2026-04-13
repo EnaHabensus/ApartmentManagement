@@ -96,56 +96,56 @@ function formatCurrency(n: number): string {
 ---
 
 <AppLayout title="Troškovi" user={profile} isAdmin={true} activeRoute="/troskovi">
-  <div class="p-6 max-w-7xl mx-auto">
+  <div class="p-4 md:p-6 max-w-7xl mx-auto">
 
     <!-- Header -->
-    <div class="flex items-center justify-between mb-6">
+    <div class="flex items-center justify-between mb-4 md:mb-6">
       <div>
-        <h1 class="text-2xl font-bold text-gray-900">Troškovi</h1>
+        <h1 class="text-xl md:text-2xl font-bold text-gray-900">Troškovi</h1>
         <p class="text-gray-500 text-sm mt-1">{expenses.length} trošak{expenses.length === 1 ? '' : expenses.length < 5 ? 'a' : 'a'}</p>
       </div>
       {isAdmin && (
-        <button onclick="openAddModal()" class="btn-primary">+ Dodaj trošak</button>
+        <button onclick="openAddModal()" class="btn-primary text-sm">+ Dodaj trošak</button>
       )}
     </div>
 
-    <!-- KPI -->
-    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-      <div class="card p-4">
-        <p class="text-xs font-medium text-gray-500 mb-1">Ukupni troškovi</p>
-        <p class="text-xl font-bold text-gray-900">{formatCurrency(totalAmount)}</p>
-      </div>
-      <div class="card p-4">
-        <p class="text-xs font-medium text-gray-500 mb-1">Broj troškova</p>
-        <p class="text-xl font-bold text-gray-900">{expenses.length}</p>
-      </div>
-      <div class="card p-4">
-        <p class="text-xs font-medium text-gray-500 mb-1">Prosječni trošak</p>
-        <p class="text-xl font-bold text-gray-900">{expenses.length ? formatCurrency(totalAmount / expenses.length) : '—'}</p>
+    <!-- KPI horizontal scroll -->
+    <div class="-mx-4 px-4 md:mx-0 md:px-0 mb-4 md:mb-6">
+      <div class="flex gap-3 overflow-x-auto snap-x pb-1 md:grid md:grid-cols-3 md:gap-4 md:overflow-visible">
+        <div class="card p-4 flex-shrink-0 w-44 snap-start md:w-auto">
+          <p class="text-xs font-medium text-gray-500 mb-1">Ukupni troškovi</p>
+          <p class="text-xl font-bold text-gray-900">{formatCurrency(totalAmount)}</p>
+        </div>
+        <div class="card p-4 flex-shrink-0 w-44 snap-start md:w-auto">
+          <p class="text-xs font-medium text-gray-500 mb-1">Broj troškova</p>
+          <p class="text-xl font-bold text-gray-900">{expenses.length}</p>
+        </div>
+        <div class="card p-4 flex-shrink-0 w-44 snap-start md:w-auto">
+          <p class="text-xs font-medium text-gray-500 mb-1">Prosječni trošak</p>
+          <p class="text-xl font-bold text-gray-900">{expenses.length ? formatCurrency(totalAmount / expenses.length) : '—'}</p>
+        </div>
       </div>
     </div>
 
     <!-- Filteri -->
-    <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
-      <div></div>
+    <div class="mb-4">
       <form method="GET" action="/troskovi" id="filter-form" class="flex flex-wrap gap-2">
-        <select name="apartment_id" onchange="document.getElementById('filter-form').submit()" class="input py-1.5 text-sm w-auto">
+        <select name="apartment_id" onchange="this.form.submit()" class="input text-sm w-auto">
           <option value="">Svi apartmani</option>
           {allApartments.map((apt) => (
             <option value={apt.id} selected={filterApartmentId === apt.id}>{apt.name}</option>
           ))}
         </select>
-        <select name="category_id" onchange="document.getElementById('filter-form').submit()" class="input py-1.5 text-sm w-auto">
+        <select name="category_id" onchange="this.form.submit()" class="input text-sm w-auto">
           <option value="">Sve kategorije</option>
           {categories.map((c) => (
             <option value={c.id} selected={filterCategoryId === c.id}>{c.name}</option>
           ))}
         </select>
-        {filterApartmentId && <input type="hidden" name="apartment_id" value={filterApartmentId} />}
       </form>
     </div>
 
-    <!-- Tablica -->
+    <!-- Sadržaj -->
     {expenses.length === 0 ? (
       <div class="card p-12 text-center">
         <div class="text-gray-400 mb-4">
@@ -158,106 +158,180 @@ function formatCurrency(n: number): string {
         <p class="text-gray-500">Dodajte prvi trošak klikom na gumb gore desno.</p>
       </div>
     ) : (
-      <div class="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
-        <table class="text-sm" style="min-width: 800px; width: 100%;">
-          <thead>
-            <tr>
-              <th class="table-head px-4 py-3 text-left">Naziv</th>
-              <th class="table-head px-4 py-3 text-left">Kategorija</th>
-              <th class="table-head px-4 py-3 text-left">Apartman</th>
-              <th class="table-head px-4 py-3 text-left whitespace-nowrap">Datum</th>
-              <th class="table-head px-4 py-3 text-right">Iznos</th>
-              <th class="table-head px-4 py-3 text-left">Osoba</th>
-              {isAdmin && <th class="table-head px-4 py-3"></th>}
-            </tr>
-          </thead>
-          <tbody class="divide-y divide-gray-100">
-            {expenses.map((e) => {
-              const color = aptColorMap.get(e.apartment_id) ?? '#3B82F6';
-              return (
-                <tr class="table-row" id={`row-${e.id}`}>
-                  <td class="table-cell font-medium text-gray-900">
-                    {e.title}
-                    {e.notes && <div class="text-xs text-gray-400 mt-0.5 truncate max-w-xs">{e.notes}</div>}
-                  </td>
-                  <td class="table-cell">
-                    {(() => {
-                      const cat = catMap.get(e.category_id);
-                      if (!cat) return <span class="text-gray-400">—</span>;
-                      return (
-                        <span
-                          class="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium whitespace-nowrap"
-                          style={`background-color: ${cat.color}20; color: ${cat.color}; box-shadow: inset 0 0 0 1px ${cat.color}40`}
-                        >{cat.name}</span>
-                      );
-                    })()}
-                  </td>
-                  <td class="table-cell">
+      <>
+        <!-- Mobile kartice -->
+        <div class="space-y-3 md:hidden">
+          {expenses.map((e) => {
+            const color = aptColorMap.get(e.apartment_id) ?? '#3B82F6';
+            const cat = catMap.get(e.category_id);
+            return (
+              <div
+                class="card p-4 cursor-pointer active:bg-gray-50"
+                data-expense={JSON.stringify({
+                  id: e.id,
+                  title: e.title,
+                  notes: e.notes ?? '',
+                  category_id: e.category_id ?? '',
+                  category_name: cat?.name ?? '',
+                  category_color: cat?.color ?? '',
+                  apt_name: aptNameMap.get(e.apartment_id) ?? '',
+                  apt_color: color,
+                  apartment_id: e.apartment_id,
+                  expense_date: e.expense_date,
+                  amount: e.amount,
+                  created_by: e.created_by,
+                  created_by_name: createdByMap.get(e.created_by) ?? '',
+                })}
+                onclick="openExpenseDrawer(this)"
+              >
+                <!-- Redak 1: kategorija + apartman badge -->
+                <div class="flex items-center justify-between gap-2 mb-2">
+                  {cat ? (
                     <span
-                      class="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium whitespace-nowrap"
-                      style={`background-color: ${color}20; color: ${color}; box-shadow: inset 0 0 0 1px ${color}40`}
-                    >
-                      {aptNameMap.get(e.apartment_id) ?? '—'}
-                    </span>
-                  </td>
-                  <td class="table-cell text-gray-500 whitespace-nowrap">{formatDate(e.expense_date)}</td>
-                  <td class="table-cell text-right font-medium text-gray-900">{formatCurrency(e.amount)}</td>
-                  <td class="table-cell">
-                    {createdByMap.get(e.created_by)
-                      ? (() => {
-                          const name = createdByMap.get(e.created_by)!;
-                          const initials = name.split(' ').slice(0, 2).map((n: string) => n[0]?.toUpperCase() ?? '').join('');
-                          return (
-                            <div class="flex items-center gap-2">
-                              <div class="h-6 w-6 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
-                                <span class="text-blue-700 text-xs font-semibold">{initials}</span>
-                              </div>
-                              <span class="text-sm text-gray-700 whitespace-nowrap">{name}</span>
-                            </div>
-                          );
-                        })()
-                      : <span class="text-gray-400">—</span>
-                    }
-                  </td>
-                  {isAdmin && (
-                    <td class="table-cell">
-                      <div class="flex items-center gap-1">
-                        <button
-                          onclick={`openEditModal(${JSON.stringify({
-                            id: e.id,
-                            apartment_id: e.apartment_id,
-                            category_id: e.category_id ?? '',
-                            title: e.title,
-                            amount: e.amount,
-                            expense_date: e.expense_date,
-                            created_by: e.created_by,
-                            notes: e.notes ?? '',
-                          })})`}
-                          class="btn-ghost text-xs px-2 py-1"
-                        >Uredi</button>
-                        <button
-                          onclick={`confirmDelete('${e.id}', '${e.title.replace(/'/g, "\\'")}')`}
-                          class="btn-ghost text-xs px-2 py-1 text-red-500 hover:bg-red-50 hover:text-red-700"
-                        >Obriši</button>
-                      </div>
-                    </td>
+                      class="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium truncate max-w-[140px]"
+                      style={`background-color: ${cat.color}20; color: ${cat.color}; box-shadow: inset 0 0 0 1px ${cat.color}40`}
+                    >{cat.name}</span>
+                  ) : (
+                    <span class="text-xs text-gray-400">Bez kategorije</span>
                   )}
-                </tr>
-              );
-            })}
-          </tbody>
-          <!-- Footer s ukupno -->
-          <tfoot>
-            <tr class="bg-gray-50 border-t-2 border-gray-200">
-              <td class="px-4 py-3 text-sm font-semibold text-gray-700" colspan="4">Ukupno</td>
-              <td class="px-4 py-3 text-sm font-bold text-gray-900 text-right">{formatCurrency(totalAmount)}</td>
-              <td colspan="2"></td>
-            </tr>
-          </tfoot>
-        </table>
-      </div>
+                  <span
+                    class="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium whitespace-nowrap"
+                    style={`background-color: ${color}20; color: ${color}; box-shadow: inset 0 0 0 1px ${color}40`}
+                  >{aptNameMap.get(e.apartment_id) ?? '—'}</span>
+                </div>
+                <!-- Redak 2: naziv -->
+                <p class="font-semibold text-slate-900 truncate mb-2">{e.title}</p>
+                <!-- Redak 3: datum + iznos -->
+                <div class="flex items-center justify-between mb-2">
+                  <span class="text-sm text-slate-500">{formatDate(e.expense_date)}</span>
+                  <span class="text-sm font-semibold text-slate-900">{formatCurrency(e.amount)}</span>
+                </div>
+                <!-- Redak 4: detalji link -->
+                <div class="flex items-center gap-0.5 text-blue-600 justify-end">
+                  <span class="text-xs font-medium">Detalji</span>
+                  <svg class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clip-rule="evenodd" />
+                  </svg>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <!-- Desktop tablica -->
+        <div class="hidden md:block overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
+          <table class="text-sm" style="min-width: 800px; width: 100%;">
+            <thead>
+              <tr>
+                <th class="table-head px-4 py-3 text-left">Naziv</th>
+                <th class="table-head px-4 py-3 text-left">Kategorija</th>
+                <th class="table-head px-4 py-3 text-left">Apartman</th>
+                <th class="table-head px-4 py-3 text-left whitespace-nowrap">Datum</th>
+                <th class="table-head px-4 py-3 text-right">Iznos</th>
+                <th class="table-head px-4 py-3 text-left">Osoba</th>
+                {isAdmin && <th class="table-head px-4 py-3"></th>}
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+              {expenses.map((e) => {
+                const color = aptColorMap.get(e.apartment_id) ?? '#3B82F6';
+                return (
+                  <tr class="table-row" id={`row-${e.id}`}>
+                    <td class="table-cell font-medium text-gray-900">
+                      {e.title}
+                      {e.notes && <div class="text-xs text-gray-400 mt-0.5 truncate max-w-xs">{e.notes}</div>}
+                    </td>
+                    <td class="table-cell">
+                      {(() => {
+                        const cat = catMap.get(e.category_id);
+                        if (!cat) return <span class="text-gray-400">—</span>;
+                        return (
+                          <span
+                            class="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium whitespace-nowrap"
+                            style={`background-color: ${cat.color}20; color: ${cat.color}; box-shadow: inset 0 0 0 1px ${cat.color}40`}
+                          >{cat.name}</span>
+                        );
+                      })()}
+                    </td>
+                    <td class="table-cell">
+                      <span
+                        class="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium whitespace-nowrap"
+                        style={`background-color: ${color}20; color: ${color}; box-shadow: inset 0 0 0 1px ${color}40`}
+                      >
+                        {aptNameMap.get(e.apartment_id) ?? '—'}
+                      </span>
+                    </td>
+                    <td class="table-cell text-gray-500 whitespace-nowrap">{formatDate(e.expense_date)}</td>
+                    <td class="table-cell text-right font-medium text-gray-900">{formatCurrency(e.amount)}</td>
+                    <td class="table-cell">
+                      {createdByMap.get(e.created_by)
+                        ? (() => {
+                            const name = createdByMap.get(e.created_by)!;
+                            const initials = name.split(' ').slice(0, 2).map((n: string) => n[0]?.toUpperCase() ?? '').join('');
+                            return (
+                              <div class="flex items-center gap-2">
+                                <div class="h-6 w-6 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
+                                  <span class="text-blue-700 text-xs font-semibold">{initials}</span>
+                                </div>
+                                <span class="text-sm text-gray-700 whitespace-nowrap">{name}</span>
+                              </div>
+                            );
+                          })()
+                        : <span class="text-gray-400">—</span>
+                      }
+                    </td>
+                    {isAdmin && (
+                      <td class="table-cell">
+                        <div class="flex items-center gap-1">
+                          <button
+                            data-id={e.id}
+                            data-apt={e.apartment_id}
+                            data-cat={e.category_id ?? ''}
+                            data-title={e.title}
+                            data-amount={String(e.amount)}
+                            data-date={e.expense_date}
+                            data-by={e.created_by}
+                            data-notes={e.notes ?? ''}
+                            onclick="openEditFromTableBtn(this)"
+                            class="btn-ghost text-xs px-2 py-1"
+                          >Uredi</button>
+                          <button
+                            data-id={e.id}
+                            data-title={e.title}
+                            onclick="confirmDeleteFromBtn(this)"
+                            class="btn-ghost text-xs px-2 py-1 text-red-500 hover:bg-red-50 hover:text-red-700"
+                          >Obriši</button>
+                        </div>
+                      </td>
+                    )}
+                  </tr>
+                );
+              })}
+            </tbody>
+            <!-- Footer s ukupno -->
+            <tfoot>
+              <tr class="bg-gray-50 border-t-2 border-gray-200">
+                <td class="px-4 py-3 text-sm font-semibold text-gray-700" colspan="4">Ukupno</td>
+                <td class="px-4 py-3 text-sm font-bold text-gray-900 text-right">{formatCurrency(totalAmount)}</td>
+                <td colspan="2"></td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </>
     )}
   </div>
+
+  <!-- Expense Drawer (mobile) -->
+  <div id="expense-drawer" class="fixed inset-x-0 bottom-0 z-50 translate-y-full transition-transform duration-300 ease-in-out md:hidden" onclick="closeExpenseDrawer()">
+    <div class="bg-white rounded-t-2xl shadow-2xl max-h-[85vh] overflow-y-auto" onclick="event.stopPropagation()">
+      <div class="flex justify-center pt-3 pb-1">
+        <div class="w-10 h-1 rounded-full bg-gray-300"></div>
+      </div>
+      <div class="px-4 pb-6" id="expense-drawer-content"></div>
+    </div>
+  </div>
+  <div id="expense-drawer-overlay" class="fixed inset-0 bg-black/40 z-40 hidden" onclick="closeExpenseDrawer()"></div>
 
   {/* ── Modali (samo admin) ── */}
   {isAdmin && (
@@ -429,7 +503,7 @@ function formatCurrency(n: number): string {
   <div id="toast" class="hidden fixed bottom-4 right-4 z-50 rounded-lg px-4 py-3 text-sm font-medium shadow-lg"></div>
 </AppLayout>
 
-<script define:vars={{ aptUsersMap }}>
+<script define:vars={{ aptUsersMap, isAdmin }}>
   // ── Helpers ──────────────────────────────────────────────────────────────────
 
   function closeModalOnOverlay(event, id) {
@@ -458,6 +532,100 @@ function formatCurrency(n: number): string {
     if (!btn) return;
     btn.disabled = loading;
     btn.textContent = loading ? 'Spremanje...' : defaultText;
+  }
+
+  function fmtCurrency(n) {
+    return new Intl.NumberFormat('hr-HR', { style: 'currency', currency: 'EUR' }).format(n);
+  }
+
+  function fmtDate(d) {
+    const [y, m, day] = d.split('-');
+    return `${day}.${m}.${y}`;
+  }
+
+  // ── Drawer ───────────────────────────────────────────────────────────────────
+
+  let _currentExpense = null;
+
+  function openExpenseDrawer(card) {
+    _currentExpense = JSON.parse(card.dataset.expense);
+    renderExpenseDrawerContent(_currentExpense);
+    document.getElementById('expense-drawer').classList.remove('translate-y-full');
+    document.getElementById('expense-drawer-overlay').classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+  }
+
+  function closeExpenseDrawer() {
+    document.getElementById('expense-drawer').classList.add('translate-y-full');
+    document.getElementById('expense-drawer-overlay').classList.add('hidden');
+    document.body.style.overflow = '';
+  }
+
+  function renderExpenseDrawerContent(d) {
+    const catBadge = d.category_name
+      ? `<span class="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium" style="background-color:${d.category_color}20;color:${d.category_color};box-shadow:inset 0 0 0 1px ${d.category_color}40">${d.category_name}</span>`
+      : `<span class="text-xs text-gray-400">Bez kategorije</span>`;
+    const aptBadge = `<span class="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium" style="background-color:${d.apt_color}20;color:${d.apt_color};box-shadow:inset 0 0 0 1px ${d.apt_color}40">${d.apt_name}</span>`;
+
+    let createdByHtml = '';
+    if (d.created_by_name) {
+      const initials = d.created_by_name.split(' ').slice(0, 2).map(n => n[0]?.toUpperCase() ?? '').join('');
+      createdByHtml = `
+        <div class="flex items-center gap-2 mb-4">
+          <div class="h-7 w-7 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
+            <span class="text-blue-700 text-xs font-semibold">${initials}</span>
+          </div>
+          <span class="text-sm text-gray-700">${d.created_by_name}</span>
+        </div>`;
+    }
+
+    const adminButtons = isAdmin ? `
+      <div class="flex gap-3 pt-4 border-t border-gray-100">
+        <button onclick="openEditFromDrawer()" class="flex-1 btn-secondary text-sm py-2">Uredi</button>
+        <button onclick="openDeleteFromDrawer()" class="flex-1 btn-danger text-sm py-2">Obriši</button>
+      </div>` : '';
+
+    document.getElementById('expense-drawer-content').innerHTML = `
+      <div class="flex items-center gap-2 mb-3">
+        ${catBadge}
+        ${aptBadge}
+      </div>
+      <h2 class="text-lg font-bold text-gray-900 mb-1">${d.title}</h2>
+      ${d.notes ? `<p class="text-sm text-gray-500 mb-4">${d.notes}</p>` : '<div class="mb-4"></div>'}
+      <div class="grid grid-cols-2 gap-4 mb-4">
+        <div>
+          <p class="text-xs text-gray-500 mb-0.5">Datum</p>
+          <p class="text-sm font-medium text-gray-900">${fmtDate(d.expense_date)}</p>
+        </div>
+        <div>
+          <p class="text-xs text-gray-500 mb-0.5">Iznos</p>
+          <p class="text-sm font-bold text-gray-900">${fmtCurrency(d.amount)}</p>
+        </div>
+      </div>
+      ${createdByHtml}
+      ${adminButtons}
+    `;
+  }
+
+  function openEditFromDrawer() {
+    if (!_currentExpense) return;
+    closeExpenseDrawer();
+    setTimeout(() => openEditModal({
+      id: _currentExpense.id,
+      apartment_id: _currentExpense.apartment_id,
+      category_id: _currentExpense.category_id,
+      title: _currentExpense.title,
+      amount: _currentExpense.amount,
+      expense_date: _currentExpense.expense_date,
+      created_by: _currentExpense.created_by,
+      notes: _currentExpense.notes,
+    }), 300);
+  }
+
+  function openDeleteFromDrawer() {
+    if (!_currentExpense) return;
+    closeExpenseDrawer();
+    setTimeout(() => confirmDelete(_currentExpense.id, _currentExpense.title), 300);
   }
 
   // ── Dropdown osoba ────────────────────────────────────────────────────────────
@@ -507,6 +675,23 @@ function formatCurrency(n: number): string {
     document.getElementById('modal-edit').classList.remove('hidden');
   }
 
+  function openEditFromTableBtn(btn) {
+    openEditModal({
+      id: btn.dataset.id,
+      apartment_id: btn.dataset.apt,
+      category_id: btn.dataset.cat,
+      title: btn.dataset.title,
+      amount: parseFloat(btn.dataset.amount),
+      expense_date: btn.dataset.date,
+      created_by: btn.dataset.by,
+      notes: btn.dataset.notes,
+    });
+  }
+
+  function confirmDeleteFromBtn(btn) {
+    confirmDelete(btn.dataset.id, btn.dataset.title);
+  }
+
   document.getElementById('form-edit')?.addEventListener('submit', async (e) => {
     e.preventDefault();
     setLoading('edit-submit', true, 'Spremi promjene');
@@ -541,13 +726,11 @@ function formatCurrency(n: number): string {
     const data = await res.json();
     btn.disabled = false; btn.textContent = 'Dodaj kategoriju';
     if (!res.ok) { showModalError('cat-error', 'cat-error-text', data.error ?? 'Greška.'); return; }
-    // Dodaj opciju u oba selecta
     const opt = new Option(data.category.name, data.category.id, true, true);
     const addSel = document.getElementById('add-category_id');
     const editSel = document.getElementById('edit-category_id');
     if (addSel) addSel.add(opt.cloneNode(true));
     if (editSel) editSel.add(opt.cloneNode(true));
-    // Selektiraj u ciljnom modalu
     const targetSel = document.getElementById(`${_categoryTargetModal}-category_id`);
     if (targetSel) targetSel.value = data.category.id;
     document.getElementById('modal-category').classList.add('hidden');
@@ -582,12 +765,18 @@ function formatCurrency(n: number): string {
   window.closeModalOnOverlay = closeModalOnOverlay;
   window.openAddModal = openAddModal;
   window.openEditModal = openEditModal;
+  window.openEditFromTableBtn = openEditFromTableBtn;
+  window.confirmDeleteFromBtn = confirmDeleteFromBtn;
   window.onAddAptChange = onAddAptChange;
   window.onEditAptChange = onEditAptChange;
   window.openNewCategoryModal = openNewCategoryModal;
   window.submitNewCategory = submitNewCategory;
   window.confirmDelete = confirmDelete;
   window.doDelete = doDelete;
+  window.openExpenseDrawer = openExpenseDrawer;
+  window.closeExpenseDrawer = closeExpenseDrawer;
+  window.openEditFromDrawer = openEditFromDrawer;
+  window.openDeleteFromDrawer = openDeleteFromDrawer;
 
   // Toast iz URL
   const _p = new URLSearchParams(window.location.search);
