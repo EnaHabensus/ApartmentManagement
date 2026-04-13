@@ -405,13 +405,18 @@ function calcNocenja(checkIn: string, checkOut: string): number {
           <span class="text-sm text-slate-400">Račun nije izdan</span>
         </div>`;
 
+    const esc = (s: string) => s.replace(/&/g,'&amp;').replace(/"/g,'&quot;');
     const actionsHtml = r.invoice_id
       ? `<button onclick="deleteFromDrawer('${r.invoice_id}')"
            class="w-full rounded-xl border border-red-200 py-3 text-sm font-semibold text-red-600 hover:bg-red-50 transition-colors">
            Obriši račun
          </button>`
       : `<div class="flex flex-col gap-2">
-           <button onclick="generateFromDrawer('${r.id}', ${JSON.stringify(r.guest_name)}, ${JSON.stringify(r.last_invoice_note)})"
+           <button
+             data-rez-id="${r.id}"
+             data-guest-name="${esc(r.guest_name)}"
+             data-last-note="${esc(r.last_invoice_note)}"
+             onclick="generateFromDrawer(this)"
              class="w-full rounded-xl bg-blue-600 py-3 text-sm font-semibold text-white">
              Generiraj račun
            </button>
@@ -465,7 +470,10 @@ function calcNocenja(checkIn: string, checkOut: string): number {
     document.body.style.overflow = '';
   }
 
-  function generateFromDrawer(rezId: string, guestName: string, lastNote: string) {
+  function generateFromDrawer(btn: HTMLElement) {
+    const rezId    = btn.dataset.rezId ?? '';
+    const guestName = btn.dataset.guestName ?? '';
+    const lastNote  = btn.dataset.lastNote ?? '';
     closeRacunDrawer();
     setTimeout(() => openGenerateModal(rezId, guestName, lastNote), 300);
   }
