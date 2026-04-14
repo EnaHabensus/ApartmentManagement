@@ -70,11 +70,10 @@ const bruto = rez.reduce((s, r) => s + (r.amount_gross ?? 0), 0);
 const provizija = rez.reduce((s, r) => s + (r.commission ?? 0), 0);
 const neto = rez.reduce((s, r) => s + ((r.amount_gross ?? 0) - (r.commission ?? 0)), 0);
 const zaprimljeno = rez.filter((r) => r.is_paid).reduce((s, r) => s + ((r.amount_gross ?? 0) - (r.commission ?? 0)), 0);
-const todayStr = today.toISOString().split('T')[0];
-const completedRez = rez.filter((r) => r.check_out <= todayStr);
-const completedNeto = completedRez.reduce((s, r) => s + ((r.amount_gross ?? 0) - (r.commission ?? 0)), 0);
-const completedNocenja = completedRez.reduce((s, r) => s + Math.round((new Date(r.check_out).getTime() - new Date(r.check_in).getTime()) / 86400000), 0);
-const avgPricePerNight = completedNocenja > 0 ? completedNeto / completedNocenja : 0;
+const paidRez = rez.filter((r) => r.is_paid);
+const paidNeto = paidRez.reduce((s, r) => s + ((r.amount_gross ?? 0) - (r.commission ?? 0)), 0);
+const paidNocenja = paidRez.reduce((s, r) => s + Math.round((new Date(r.check_out).getTime() - new Date(r.check_in).getTime()) / 86400000), 0);
+const avgPricePerNight = paidNocenja > 0 ? paidNeto / paidNocenja : 0;
 
 function formatDate(d: string): string {
   const [y, m, day] = d.split('-');
