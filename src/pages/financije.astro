@@ -70,6 +70,8 @@ const bruto = rez.reduce((s, r) => s + (r.amount_gross ?? 0), 0);
 const provizija = rez.reduce((s, r) => s + (r.commission ?? 0), 0);
 const neto = rez.reduce((s, r) => s + ((r.amount_gross ?? 0) - (r.commission ?? 0)), 0);
 const zaprimljeno = rez.filter((r) => r.is_paid).reduce((s, r) => s + ((r.amount_gross ?? 0) - (r.commission ?? 0)), 0);
+const totalNocenja = rez.reduce((s, r) => s + Math.round((new Date(r.check_out).getTime() - new Date(r.check_in).getTime()) / 86400000), 0);
+const avgPricePerNight = totalNocenja > 0 ? neto / totalNocenja : 0;
 
 function formatDate(d: string): string {
   const [y, m, day] = d.split('-');
@@ -145,7 +147,7 @@ function calcNocenja(checkIn: string, checkOut: string): number {
 
     <!-- KPI kartice -->
     <div class="-mx-4 px-4 md:mx-0 md:px-0 mb-6">
-      <div class="flex overflow-x-auto gap-3 py-1 px-1 snap-x snap-mandatory md:grid md:grid-cols-4 md:gap-4 md:overflow-visible md:py-0 md:px-0">
+      <div class="flex overflow-x-auto gap-3 py-1 px-1 snap-x snap-mandatory md:grid md:grid-cols-5 md:gap-4 md:overflow-visible md:py-0 md:px-0">
       <div class="card px-4 py-5 md:p-4 flex-shrink-0 w-44 md:w-auto snap-start">
         <p class="text-xs font-medium text-gray-500 mb-1.5">Bruto</p>
         <p class="text-2xl md:text-xl font-bold text-gray-900">{formatEur(bruto)}</p>
@@ -161,6 +163,10 @@ function calcNocenja(checkIn: string, checkOut: string): number {
       <div class="card px-4 py-5 md:p-4 flex-shrink-0 w-44 md:w-auto snap-start">
         <p class="text-xs font-medium text-gray-500 mb-1.5">Zaprimljeno</p>
         <p class="text-2xl md:text-xl font-bold text-green-600" id="kpi-zaprimljeno">{formatEur(zaprimljeno)}</p>
+      </div>
+      <div class="card px-4 py-5 md:p-4 flex-shrink-0 w-44 md:w-auto snap-start">
+        <p class="text-xs font-medium text-gray-500 mb-1.5">Prosj. cijena noćenja</p>
+        <p class="text-2xl md:text-xl font-bold text-gray-900">{avgPricePerNight > 0 ? formatEur(avgPricePerNight) : '—'}</p>
       </div>
       </div>
     </div>
