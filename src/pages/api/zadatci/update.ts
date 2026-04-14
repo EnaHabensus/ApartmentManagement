@@ -142,9 +142,20 @@ export const POST: APIRoute = async ({ request, cookies, redirect }) => {
     const { data: profiles } = await adminSupabase.from('profiles').select('id, full_name, email').in('id', allUserIds);
     const profileMap = new Map((profiles ?? []).map((p: any) => [p.id, p]));
 
+    // Dohvati completion tokene za nove assignee-je
+    const { data: addedUserRows } = addedUserIds.length > 0
+      ? await adminSupabase.from('task_assignees').select('user_id, completion_token').eq('task_id', id).in('user_id', addedUserIds)
+      : { data: [] };
+    const userTokenMap = new Map((addedUserRows ?? []).map((r: any) => [r.user_id, r.completion_token]));
+
     for (const uid of addedUserIds) {
       const p = profileMap.get(uid);
-      if (p) emailPromises.push(sendTaskAssignedEmail({ to: p.email, assigneeName: p.full_name, apartmentName: aptName, taskTitle: taskData?.title ?? '', dueDate, dueTime: taskData?.due_time }).catch(() => {}));
+      const token = userTokenMap.get(uid);
+      if (p) emailPromises.push(sendTaskAssignedEmail({
+        to: p.email, assigneeName: p.full_name, apartmentName: aptName, taskTitle: taskData?.title ?? '',
+        dueDate, dueTime: taskData?.due_time,
+        completionUrl: token ? `${appUrl}/api/zadatci/complete-token?token=${token}` : null,
+      }).catch(() => {}));
     }
     for (const uid of removedUserIds) {
       const p = profileMap.get(uid);

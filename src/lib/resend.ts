@@ -186,6 +186,7 @@ export async function sendTaskAssignedEmail({
   taskTitle,
   dueDate,
   dueTime,
+  completionUrl,
 }: {
   to: string;
   assigneeName: string;
@@ -193,9 +194,20 @@ export async function sendTaskAssignedEmail({
   taskTitle: string;
   dueDate: string;
   dueTime?: string | null;
+  completionUrl?: string | null;
 }) {
   const resend = createResendClient();
   const dateTime = dueTime ? `${dueDate} u ${dueTime}` : dueDate;
+  const completionBtn = completionUrl ? `
+    <div style="text-align: center; margin: 28px 0;">
+      <a href="${completionUrl}"
+         style="background: #16A34A; color: white; padding: 14px 32px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 15px; display: inline-block;">
+        ✅ Označi kao završeno
+      </a>
+    </div>
+    <p style="font-size: 13px; color: #6B7280; text-align: center; margin: 0 0 16px;">
+      Kliknite gumb kad završite zadatak — nije potrebna prijava.
+    </p>` : '';
   return resend.emails.send({
     from: getFromEmail(),
     to,
@@ -212,6 +224,7 @@ export async function sendTaskAssignedEmail({
             <p style="margin: 0 0 8px; font-size: 18px; font-weight: bold; color: #0F2544;">${taskTitle}</p>
             <p style="margin: 0; color: #6B7280; font-size: 14px;">📅 ${dateTime}</p>
           </div>
+          ${completionBtn}
           <p style="font-size: 12px; color: #9CA3AF; margin: 0;">Moji Apartmani — upravljanje apartmanima</p>
         </div>
       </div>
@@ -334,7 +347,7 @@ export async function sendDailyStaffDigestEmail({
   to: string;
   staffName: string;
   todayStr: string;
-  tasks: Array<{ title: string; apartmentName: string; dueTime?: string | null }>;
+  tasks: Array<{ title: string; apartmentName: string; dueTime?: string | null; completionUrl?: string | null }>;
 }) {
   const resend = createResendClient();
   const [y, m, d] = todayStr.split('-');
@@ -342,10 +355,16 @@ export async function sendDailyStaffDigestEmail({
 
   const taskRows = tasks.map((t) => {
     const time = t.dueTime ? ` u ${t.dueTime}` : '';
+    const btn = t.completionUrl ? `
+      <a href="${t.completionUrl}"
+         style="display: inline-block; margin-top: 10px; background: #16A34A; color: white; padding: 8px 18px; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 13px;">
+        ✅ Označi kao završeno
+      </a>` : '';
     return `
       <div style="background: white; border: 1px solid #E5E7EB; border-radius: 6px; padding: 14px 16px; margin-bottom: 8px;">
         <p style="margin: 0 0 4px; font-weight: bold; color: #0F2544;">${t.title}</p>
         <p style="margin: 0; font-size: 13px; color: #6B7280;">${t.apartmentName}${time}</p>
+        ${btn}
       </div>
     `;
   }).join('');

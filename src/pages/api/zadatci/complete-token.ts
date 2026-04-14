@@ -12,7 +12,7 @@ export const GET: APIRoute = async ({ url, redirect }) => {
   // Pronađi assignee red po completion_token
   const { data: assigneeRow } = await adminSupabase
     .from('task_assignees')
-    .select('id, task_id, external_member_id, completed_at')
+    .select('id, task_id, user_id, external_member_id, completed_at')
     .eq('completion_token', token)
     .maybeSingle();
 
@@ -31,16 +31,23 @@ export const GET: APIRoute = async ({ url, redirect }) => {
     return redirect('/task-complete?status=already_done&task=' + encodeURIComponent(task.title));
   }
 
-  // Dohvati external member za ime
-  const { data: extMember } = assigneeRow.external_member_id
-    ? await adminSupabase
-        .from('external_members')
-        .select('name')
-        .eq('id', assigneeRow.external_member_id)
-        .single()
-    : { data: null };
-
-  const completedByName = extMember?.name ?? 'Pomoćno osoblje';
+  // Dohvati ime osobe koja završava zadatak
+  let completedByName = 'Korisnik';
+  if (assigneeRow.external_member_id) {
+    const { data: extMember } = await adminSupabase
+      .from('external_members')
+      .select('name')
+      .eq('id', assigneeRow.external_member_id)
+      .single();
+    completedByName = extMember?.name ?? 'Pomoćno osoblje';
+  } else if (assigneeRow.user_id) {
+    const { data: profile } = await adminSupabase
+      .from('profiles')
+      .select('full_name')
+      .eq('id', assigneeRow.user_id)
+      .single();
+    completedByName = profile?.full_name ?? 'Korisnik';
+  }
 
   // Označi assignee row kao završen
   await adminSupabase

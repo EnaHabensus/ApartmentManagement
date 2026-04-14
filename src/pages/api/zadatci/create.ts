@@ -76,7 +76,7 @@ export const POST: APIRoute = async ({ request, cookies, redirect }) => {
 
   // Pošalji emailove
   if (assignee_ids.length > 0 || external_assignee_ids.length > 0) {
-    const [{ data: apt }, { data: profiles }, { data: extMembers }, { data: insertedExtRows }] = await Promise.all([
+    const [{ data: apt }, { data: profiles }, { data: extMembers }, { data: insertedExtRows }, { data: insertedUserRows }] = await Promise.all([
       adminSupabase.from('apartments').select('name').eq('id', apartment_id).single(),
       assignee_ids.length > 0
         ? adminSupabase.from('profiles').select('id, full_name, email').in('id', assignee_ids)
@@ -87,11 +87,15 @@ export const POST: APIRoute = async ({ request, cookies, redirect }) => {
       external_assignee_ids.length > 0
         ? adminSupabase.from('task_assignees').select('external_member_id, completion_token').eq('task_id', task.id).not('external_member_id', 'is', null)
         : Promise.resolve({ data: [] }),
+      assignee_ids.length > 0
+        ? adminSupabase.from('task_assignees').select('user_id, completion_token').eq('task_id', task.id).not('user_id', 'is', null)
+        : Promise.resolve({ data: [] }),
     ]);
 
     const dueDate = due_date.split('-').reverse().join('.');
     const aptName = apt?.name ?? '';
     const tokenMap = new Map((insertedExtRows ?? []).map((r: any) => [r.external_member_id, r.completion_token]));
+    const userTokenMap = new Map((insertedUserRows ?? []).map((r: any) => [r.user_id, r.completion_token]));
     const appUrl = getAppUrl();
 
     // In-app notifikacije za regularne korisnike
@@ -105,13 +109,15 @@ export const POST: APIRoute = async ({ request, cookies, redirect }) => {
     }
 
     await Promise.all([
-      ...(profiles ?? []).map((p) =>
-        sendTaskAssignedEmail({
+      ...(profiles ?? []).map((p) => {
+        const token = userTokenMap.get(p.id);
+        return sendTaskAssignedEmail({
           to: p.email, assigneeName: p.full_name,
           apartmentName: aptName, taskTitle: title,
           dueDate, dueTime: due_time,
-        }).catch(() => {})
-      ),
+          completionUrl: token ? `${appUrl}/api/zadatci/complete-token?token=${token}` : null,
+        }).catch(() => {});
+      }),
       ...(extMembers ?? []).map((em: any) => {
         const token = tokenMap.get(em.id);
         if (!token) return Promise.resolve();

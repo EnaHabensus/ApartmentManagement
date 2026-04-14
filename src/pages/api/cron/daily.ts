@@ -277,14 +277,16 @@ export const GET: APIRoute = async ({ request }) => {
 
     const staffTaskIds = (staffTasks ?? []).map((t) => t.id);
     const { data: staffAssigneeRows } = staffTaskIds.length > 0
-      ? await supabase.from('task_assignees').select('task_id, user_id').in('task_id', staffTaskIds).not('user_id', 'is', null)
+      ? await supabase.from('task_assignees').select('task_id, user_id, completion_token').in('task_id', staffTaskIds).not('user_id', 'is', null)
       : { data: [] };
 
-    // Grupiraj po user_id
+    // Grupiraj po user_id, čuvaj token po task_id
     const tasksByUser = new Map<string, string[]>();
+    const tokenByUserTask = new Map<string, string>(); // key: `${user_id}:${task_id}`
     for (const row of staffAssigneeRows ?? []) {
       if (!tasksByUser.has(row.user_id)) tasksByUser.set(row.user_id, []);
       tasksByUser.get(row.user_id)!.push(row.task_id);
+      if (row.completion_token) tokenByUserTask.set(`${row.user_id}:${row.task_id}`, row.completion_token);
     }
 
     const staffUserIds = [...tasksByUser.keys()];
@@ -293,6 +295,7 @@ export const GET: APIRoute = async ({ request }) => {
       : { data: [] };
 
     const taskMap = new Map((staffTasks ?? []).map((t) => [t.id, t]));
+    const appUrl2 = getAppUrl();
 
     let staffDigestsSent = 0;
     for (const profile of staffProfiles ?? []) {
@@ -300,11 +303,15 @@ export const GET: APIRoute = async ({ request }) => {
       const myTasks = myTaskIds
         .map((tid) => taskMap.get(tid))
         .filter(Boolean)
-        .map((t) => ({
-          title: t!.title,
-          apartmentName: allAptNameMap.get(t!.apartment_id) ?? '',
-          dueTime: t!.due_time,
-        }));
+        .map((t) => {
+          const token = tokenByUserTask.get(`${profile.id}:${t!.id}`);
+          return {
+            title: t!.title,
+            apartmentName: allAptNameMap.get(t!.apartment_id) ?? '',
+            dueTime: t!.due_time,
+            completionUrl: token ? `${appUrl2}/api/zadatci/complete-token?token=${token}` : null,
+          };
+        });
 
       if (myTasks.length === 0) continue;
 
