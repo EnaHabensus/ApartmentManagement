@@ -701,9 +701,10 @@ const error = Astro.url.searchParams.get('error');
       el.innerHTML = `
         <div class="flex items-center justify-between mb-1">
           <h2 class="text-lg font-bold text-gray-900">${d.name}</h2>
-          <span class="badge bg-purple-100 text-purple-700">Pomoćno osoblje</span>
+          <span class="badge bg-slate-100 text-slate-600">Bez prijave</span>
         </div>
-        <p class="text-sm text-slate-500 mb-4">${d.email}</p>
+        <p class="text-sm text-slate-500 mb-2">${d.email}</p>
+        <span class="badge bg-purple-100 text-purple-700 mb-4 inline-block">Pomoćno osoblje</span>
         <div>${aptRows}</div>`;
 
     } else if (d.type === 'invite') {
