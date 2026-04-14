@@ -172,42 +172,31 @@ const error = Astro.url.searchParams.get('error');
 ---
 
 <AppLayout title="Korisnici" user={profile} isAdmin={true} activeRoute="/korisnici">
-  <div class="p-6 max-w-7xl mx-auto">
+  <div class="p-4 md:p-6 max-w-7xl mx-auto">
     <!-- Header -->
-    <div class="flex items-center justify-between mb-6">
-      <div>
-        <h1 class="text-2xl font-bold text-gray-900">Korisnici</h1>
+    <div class="flex flex-wrap items-center gap-3 mb-4 md:mb-6">
+      <div class="flex-1 min-w-0">
+        <h1 class="text-xl md:text-2xl font-bold text-gray-900">Korisnici</h1>
         <p class="text-gray-500 text-sm mt-1">{users.length + externalUsers.length} korisnik{(users.length + externalUsers.length) === 1 ? '' : (users.length + externalUsers.length) < 5 ? 'a' : 'a'}</p>
       </div>
-      <button
-        onclick="document.getElementById('modal-add').classList.remove('hidden')"
-        class="btn-primary"
-      >
-        + Dodaj korisnika
-      </button>
+      <div class="flex flex-wrap items-center gap-2">
+        {adminApartments.length > 1 && (
+          <form method="GET" action="/korisnici">
+            <select name="apartment_id" onchange="this.form.submit()" class="input text-sm w-auto">
+              <option value="">Svi apartmani</option>
+              {adminApartments.map((apt) => (
+                <option value={apt.id} selected={filterApartmentId === apt.id}>{apt.name}</option>
+              ))}
+            </select>
+          </form>
+        )}
+        <button onclick="document.getElementById('modal-add').classList.remove('hidden')" class="btn-primary text-sm">
+          + Dodaj korisnika
+        </button>
+      </div>
     </div>
 
-
-    <!-- Filter apartmana -->
-    <div class="mb-4 flex items-center gap-3">
-      <label class="label mb-0 text-sm font-medium text-gray-700 whitespace-nowrap">Filter apartmana:</label>
-      <form method="GET" action="/korisnici">
-        <select
-          name="apartment_id"
-          onchange="this.form.submit()"
-          class="input py-1.5 text-sm"
-        >
-          <option value="">Svi apartmani</option>
-          {adminApartments.map((apt) => (
-            <option value={apt.id} selected={filterApartmentId === apt.id}>
-              {apt.name}
-            </option>
-          ))}
-        </select>
-      </form>
-    </div>
-
-    <!-- Tablica korisnika -->
+    <!-- Sadržaj -->
     {users.length === 0 && pendingInvites.length === 0 ? (
       <div class="card p-12 text-center">
         <div class="text-gray-400 mb-4">
@@ -225,7 +214,99 @@ const error = Astro.url.searchParams.get('error');
         </button>
       </div>
     ) : (
-      <div class="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
+      <>
+        <!-- Mobile kartice -->
+        <div class="space-y-3 md:hidden">
+          {users.map((u) => {
+            const first = u.apartments[0];
+            const extra = u.apartments.length - 1;
+            return (
+              <div
+                class="card p-4 cursor-pointer active:bg-gray-50"
+                data-user={JSON.stringify({ type: 'user', ...u })}
+                onclick="openUserDrawer(this)"
+              >
+                <p class="font-semibold text-slate-900 truncate mb-0.5">{u.full_name}</p>
+                <p class="text-sm text-slate-500 truncate mb-3">{u.email}</p>
+                <div class="flex items-center justify-between mb-3">
+                  <div class="flex items-center gap-1.5">
+                    <span
+                      class="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium whitespace-nowrap"
+                      style={`background-color: ${first.color}20; color: ${first.color}; box-shadow: inset 0 0 0 1px ${first.color}40`}
+                    >{first.apartment_name}</span>
+                    {extra > 0 && <span class="text-xs text-slate-400">+{extra} više</span>}
+                  </div>
+                  <div class="flex items-center gap-1.5">
+                    <span class={`badge ${first.role === 'admin' ? 'badge-blue' : 'badge-gray'}`}>
+                      {first.role === 'admin' ? 'Admin' : 'Staff'}
+                    </span>
+                    {extra > 0 && <span class="text-xs text-slate-400">+{extra} više</span>}
+                  </div>
+                </div>
+                <div class="flex items-center gap-0.5 text-blue-600 justify-end">
+                  <span class="text-xs font-medium">Detalji</span>
+                  <svg class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clip-rule="evenodd" />
+                  </svg>
+                </div>
+              </div>
+            );
+          })}
+          {externalUsers.map((eu) => (
+            <div
+              class="card p-4 cursor-pointer active:bg-gray-50"
+              data-user={JSON.stringify({ type: 'external', ...eu })}
+              onclick="openUserDrawer(this)"
+            >
+              <p class="font-semibold text-slate-900 truncate mb-0.5">{eu.name}</p>
+              <p class="text-sm text-slate-500 truncate mb-3">{eu.email}</p>
+              <div class="flex items-center justify-between mb-3">
+                <div class="flex items-center gap-1.5">
+                  <span
+                    class="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium whitespace-nowrap"
+                    style={`background-color: ${eu.apartments[0]?.color}20; color: ${eu.apartments[0]?.color}; box-shadow: inset 0 0 0 1px ${eu.apartments[0]?.color}40`}
+                  >{eu.apartments[0]?.apartment_name}</span>
+                  {eu.apartments.length > 1 && <span class="text-xs text-slate-400">+{eu.apartments.length - 1} više</span>}
+                </div>
+                <span class="badge bg-purple-100 text-purple-700">Pomoćno osoblje</span>
+              </div>
+              <div class="flex items-center gap-0.5 text-blue-600 justify-end">
+                <span class="text-xs font-medium">Detalji</span>
+                <svg class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
+                  <path fill-rule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clip-rule="evenodd" />
+                </svg>
+              </div>
+            </div>
+          ))}
+          {pendingInvites.map((inv) => (
+            <div
+              class="card p-4 cursor-pointer active:bg-gray-50 border-l-2 border-orange-300"
+              data-user={JSON.stringify({ type: 'invite', ...inv })}
+              onclick="openUserDrawer(this)"
+            >
+              <p class="font-semibold text-slate-900 truncate mb-0.5">{inv.full_name}</p>
+              <p class="text-sm text-slate-500 truncate mb-3">{inv.email}</p>
+              <div class="flex items-center justify-between mb-3">
+                <div class="flex items-center gap-1.5">
+                  <span
+                    class="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium whitespace-nowrap"
+                    style={`background-color: ${inv.apartments[0]?.color}20; color: ${inv.apartments[0]?.color}; box-shadow: inset 0 0 0 1px ${inv.apartments[0]?.color}40`}
+                  >{inv.apartments[0]?.apartment_name}</span>
+                </div>
+                <span class="badge bg-orange-100 text-orange-700">Pozivnica poslana</span>
+              </div>
+              <div class="flex items-center gap-0.5 text-blue-600 justify-end">
+                <span class="text-xs font-medium">Detalji</span>
+                <svg class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
+                  <path fill-rule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clip-rule="evenodd" />
+                </svg>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <!-- Desktop tablica -->
+        <div class="hidden md:block overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
         <table class="text-sm" style="min-width: 700px; width: 100%;">
           <thead>
             <tr>
@@ -374,7 +455,8 @@ const error = Astro.url.searchParams.get('error');
             ))}
           </tbody>
         </table>
-      </div>
+        </div>
+      </>
     )}
   </div>
 
@@ -540,6 +622,17 @@ const error = Astro.url.searchParams.get('error');
     </div>
   </div>
 
+  <!-- User Drawer (mobile) -->
+  <div id="user-drawer" class="fixed inset-x-0 bottom-0 z-50 translate-y-full transition-transform duration-300 ease-in-out md:hidden" onclick="closeUserDrawer()">
+    <div class="bg-white rounded-t-2xl shadow-2xl max-h-[85vh] overflow-y-auto" onclick="event.stopPropagation()">
+      <div class="flex justify-center pt-3 pb-1">
+        <div class="w-10 h-1 rounded-full bg-gray-300"></div>
+      </div>
+      <div class="px-4 pb-6" id="user-drawer-content"></div>
+    </div>
+  </div>
+  <div id="user-drawer-overlay" class="fixed inset-0 bg-black/40 z-40 hidden" onclick="closeUserDrawer()"></div>
+
   <!-- Modal: Apartmani i uloge -->
   <div id="modal-apartments" class="hidden modal-overlay" onclick="if(event.target===this)this.classList.add('hidden')">
     <div class="modal-content p-6" onclick="event.stopPropagation()">
@@ -556,6 +649,122 @@ const error = Astro.url.searchParams.get('error');
 
 <script>
   // ─── Helpers ─────────────────────────────────────────────────────────────────
+
+  // ─── User Drawer (mobile) ─────────────────────────────────────────────────────
+
+  let _currentUserDrawer: any = null;
+
+  function openUserDrawer(card: HTMLElement) {
+    _currentUserDrawer = JSON.parse(card.dataset.user ?? '{}');
+    renderUserDrawerContent(_currentUserDrawer);
+    document.getElementById('user-drawer')!.classList.remove('translate-y-full');
+    document.getElementById('user-drawer-overlay')!.classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+  }
+
+  function closeUserDrawer() {
+    document.getElementById('user-drawer')!.classList.add('translate-y-full');
+    document.getElementById('user-drawer-overlay')!.classList.add('hidden');
+    document.body.style.overflow = '';
+  }
+
+  function renderUserDrawerContent(d: any) {
+    const el = document.getElementById('user-drawer-content')!;
+
+    if (d.type === 'user') {
+      const statusBadge = d.has_logged_in
+        ? `<span class="badge badge-green">Aktivan</span>`
+        : `<span class="badge bg-yellow-100 text-yellow-700">Pozvan</span>`;
+      const aptRows = d.apartments.map((apt: any) => `
+        <div class="flex items-center justify-between py-2.5 border-b border-gray-100 last:border-0">
+          <span class="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium" style="background-color:${apt.color}20;color:${apt.color};box-shadow:inset 0 0 0 1px ${apt.color}40">${apt.apartment_name}</span>
+          <span class="badge ${apt.role === 'admin' ? 'badge-blue' : 'badge-gray'}">${apt.role === 'admin' ? 'Admin' : 'Staff'}</span>
+        </div>`).join('');
+      el.innerHTML = `
+        <div class="flex items-center justify-between mb-1">
+          <h2 class="text-lg font-bold text-gray-900">${d.full_name}</h2>
+          ${statusBadge}
+        </div>
+        <p class="text-sm text-slate-500 mb-4">${d.email}</p>
+        <div class="mb-4">${aptRows}</div>
+        <div class="flex gap-3 pt-2 border-t border-gray-100">
+          <button onclick="editFromDrawer()" class="flex-1 btn-secondary text-sm py-2">Uredi</button>
+          <button onclick="deleteFromDrawer()" class="flex-1 btn-danger text-sm py-2">Obriši</button>
+        </div>`;
+
+    } else if (d.type === 'external') {
+      const aptRows = d.apartments.map((apt: any) => `
+        <div class="flex items-center justify-between py-2.5 border-b border-gray-100 last:border-0">
+          <span class="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium" style="background-color:${apt.color}20;color:${apt.color};box-shadow:inset 0 0 0 1px ${apt.color}40">${apt.apartment_name}</span>
+          <button onclick="removeExternalFromDrawer('${d.external_member_id}','${apt.apartment_id}','${apt.apartment_name.replace(/'/g, "\\'")}')" class="text-xs text-red-500 font-medium hover:underline">Ukloni</button>
+        </div>`).join('');
+      el.innerHTML = `
+        <div class="flex items-center justify-between mb-1">
+          <h2 class="text-lg font-bold text-gray-900">${d.name}</h2>
+          <span class="badge bg-purple-100 text-purple-700">Pomoćno osoblje</span>
+        </div>
+        <p class="text-sm text-slate-500 mb-4">${d.email}</p>
+        <div>${aptRows}</div>`;
+
+    } else if (d.type === 'invite') {
+      const aptRows = d.apartments.map((apt: any) => `
+        <div class="flex items-center justify-between py-2.5 border-b border-gray-100 last:border-0">
+          <span class="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium" style="background-color:${apt.color}20;color:${apt.color};box-shadow:inset 0 0 0 1px ${apt.color}40">${apt.apartment_name}</span>
+          <span class="badge ${d.role === 'admin' ? 'badge-blue' : 'badge-gray'}">${d.role === 'admin' ? 'Admin' : 'Staff'}</span>
+        </div>`).join('');
+      el.innerHTML = `
+        <div class="flex items-center justify-between mb-1">
+          <h2 class="text-lg font-bold text-gray-900">${d.full_name}</h2>
+          <span class="badge bg-orange-100 text-orange-700">Pozivnica poslana</span>
+        </div>
+        <p class="text-sm text-slate-500 mb-4">${d.email}</p>
+        <div class="mb-4">${aptRows}</div>
+        <div class="pt-2 border-t border-gray-100">
+          <button onclick="cancelInviteFromDrawer('${d.invite_id}')" class="w-full btn-secondary text-sm py-2 text-orange-600 border-orange-200 hover:bg-orange-50">Poništi pozivnicu</button>
+        </div>`;
+    }
+  }
+
+  function editFromDrawer() {
+    if (!_currentUserDrawer || _currentUserDrawer.type !== 'user') return;
+    closeUserDrawer();
+    setTimeout(() => (window as any).openEditModal(_currentUserDrawer), 300);
+  }
+
+  function deleteFromDrawer() {
+    if (!_currentUserDrawer || _currentUserDrawer.type !== 'user') return;
+    closeUserDrawer();
+    setTimeout(() => (window as any).confirmDelete(
+      _currentUserDrawer.user_id,
+      _currentUserDrawer.full_name,
+      _currentUserDrawer.apartments.map((a: any) => a.apartment_id)
+    ), 300);
+  }
+
+  function removeExternalFromDrawer(extId: string, aptId: string, aptName: string) {
+    if (!confirm(`Ukloniti ovu osobu s apartmana ${aptName}?`)) return;
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = '/api/korisnici/delete-external';
+    [['external_member_id', extId], ['apartment_id', aptId]].forEach(([k, v]) => {
+      const inp = document.createElement('input');
+      inp.type = 'hidden'; inp.name = k; inp.value = v;
+      form.appendChild(inp);
+    });
+    document.body.appendChild(form);
+    form.submit();
+  }
+
+  function cancelInviteFromDrawer(inviteId: string) {
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = '/api/invite/cancel';
+    const inp = document.createElement('input');
+    inp.type = 'hidden'; inp.name = 'token_id'; inp.value = inviteId;
+    form.appendChild(inp);
+    document.body.appendChild(form);
+    form.submit();
+  }
 
   function openApartmentsModal(btn: HTMLElement) {
     const apts = JSON.parse(btn.dataset.apts ?? '[]');
@@ -808,6 +1017,12 @@ const error = Astro.url.searchParams.get('error');
   (window as any).confirmDelete = confirmDelete;
   (window as any).onRoleChange = onRoleChange;
   (window as any).openApartmentsModal = openApartmentsModal;
+  (window as any).openUserDrawer = openUserDrawer;
+  (window as any).closeUserDrawer = closeUserDrawer;
+  (window as any).editFromDrawer = editFromDrawer;
+  (window as any).deleteFromDrawer = deleteFromDrawer;
+  (window as any).removeExternalFromDrawer = removeExternalFromDrawer;
+  (window as any).cancelInviteFromDrawer = cancelInviteFromDrawer;
   (window as any).addExternalMember = addExternalMember;
 
   function showToast(message: string, type: 'success' | 'error' = 'success') {
