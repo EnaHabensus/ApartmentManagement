@@ -15,11 +15,12 @@ export const onRequest = defineMiddleware(async (context, next) => {
   const { request, cookies, redirect, url } = context;
   const pathname = url.pathname;
 
-  // API rute za auth i token completion nisu zaštićene
+  // API rute za auth, token completion i cron nisu zaštićene
   if (
     pathname.startsWith('/api/auth/') ||
     pathname.startsWith('/api/invite/') ||
-    pathname.startsWith('/api/zadatci/complete-token')
+    pathname.startsWith('/api/zadatci/complete-token') ||
+    pathname.startsWith('/api/cron/')
   ) {
     return next();
   }
