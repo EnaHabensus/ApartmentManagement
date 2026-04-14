@@ -243,12 +243,18 @@ const error = Astro.url.searchParams.get('error');
                 <td class="table-cell px-4 py-3 font-medium text-gray-900 whitespace-nowrap">{u.full_name}</td>
                 <td class="table-cell px-4 py-3 text-gray-500">{u.email}</td>
                 <td class="table-cell px-4 py-3">
-                  <div class="flex flex-wrap gap-1">
-                    {u.apartments.map((apt) => (
-                      <span class={`badge ${apt.role === 'admin' ? 'badge-blue' : 'badge-gray'}`}>
-                        {apt.role === 'admin' ? 'Admin' : 'Staff'}
-                      </span>
-                    ))}
+                  <div class="flex items-center gap-1.5">
+                    <span class={`badge ${u.apartments[0].role === 'admin' ? 'badge-blue' : 'badge-gray'}`}>
+                      {u.apartments[0].role === 'admin' ? 'Admin' : 'Staff'}
+                    </span>
+                    {u.apartments.length > 1 && (
+                      <button
+                        class="text-xs text-blue-600 font-medium hover:underline whitespace-nowrap"
+                        data-apts={JSON.stringify(u.apartments)}
+                        data-name={u.full_name}
+                        onclick="openApartmentsModal(this)"
+                      >+{u.apartments.length - 1} više</button>
+                    )}
                   </div>
                 </td>
                 <td class="table-cell px-4 py-3">
@@ -259,13 +265,19 @@ const error = Astro.url.searchParams.get('error');
                   )}
                 </td>
                 <td class="table-cell px-4 py-3">
-                  <div class="flex flex-wrap gap-1">
-                    {u.apartments.map((apt) => (
-                      <span
-                        class="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium whitespace-nowrap"
-                        style={`background-color: ${apt.color}20; color: ${apt.color}; box-shadow: inset 0 0 0 1px ${apt.color}40`}
-                      >{apt.apartment_name}</span>
-                    ))}
+                  <div class="flex items-center gap-1.5">
+                    <span
+                      class="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium whitespace-nowrap"
+                      style={`background-color: ${u.apartments[0].color}20; color: ${u.apartments[0].color}; box-shadow: inset 0 0 0 1px ${u.apartments[0].color}40`}
+                    >{u.apartments[0].apartment_name}</span>
+                    {u.apartments.length > 1 && (
+                      <button
+                        class="text-xs text-blue-600 font-medium hover:underline whitespace-nowrap"
+                        data-apts={JSON.stringify(u.apartments)}
+                        data-name={u.full_name}
+                        onclick="openApartmentsModal(this)"
+                      >+{u.apartments.length - 1} više</button>
+                    )}
                   </div>
                 </td>
                 <td class="table-cell px-4 py-3">
@@ -527,10 +539,36 @@ const error = Astro.url.searchParams.get('error');
       </form>
     </div>
   </div>
+
+  <!-- Modal: Apartmani i uloge -->
+  <div id="modal-apartments" class="hidden modal-overlay" onclick="if(event.target===this)this.classList.add('hidden')">
+    <div class="modal-content p-6" onclick="event.stopPropagation()">
+      <h2 class="text-lg font-semibold text-gray-900 mb-1" id="apartments-modal-title">Apartmani i uloge</h2>
+      <p class="text-sm text-gray-500 mb-4" id="apartments-modal-subtitle"></p>
+      <div id="apartments-modal-content" class="divide-y divide-gray-100"></div>
+      <div class="flex justify-end mt-5">
+        <button type="button" onclick="document.getElementById('modal-apartments').classList.add('hidden')" class="btn-secondary">Zatvori</button>
+      </div>
+    </div>
+  </div>
+
 </AppLayout>
 
 <script>
   // ─── Helpers ─────────────────────────────────────────────────────────────────
+
+  function openApartmentsModal(btn: HTMLElement) {
+    const apts = JSON.parse(btn.dataset.apts ?? '[]');
+    const name = btn.dataset.name ?? '';
+    document.getElementById('apartments-modal-subtitle')!.textContent = name;
+    document.getElementById('apartments-modal-content')!.innerHTML = apts.map((apt: any) => `
+      <div class="flex items-center justify-between py-3">
+        <span class="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium" style="background-color: ${apt.color}20; color: ${apt.color}; box-shadow: inset 0 0 0 1px ${apt.color}40">${apt.apartment_name}</span>
+        <span class="badge ${apt.role === 'admin' ? 'badge-blue' : 'badge-gray'}">${apt.role === 'admin' ? 'Admin' : 'Staff'}</span>
+      </div>
+    `).join('');
+    document.getElementById('modal-apartments')!.classList.remove('hidden');
+  }
 
   function closeModalOnOverlay(event: MouseEvent, id: string) {
     if (event.target === document.getElementById(id)) {
