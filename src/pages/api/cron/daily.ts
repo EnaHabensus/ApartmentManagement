@@ -217,15 +217,16 @@ export const GET: APIRoute = async ({ request }) => {
     }
 
     // Pošalji jedan email po adminu s podacima za NJEGOVE apartmane
+    const sentAdminIds = new Set<string>();
     let digestsSent = 0;
     for (const adminRow of (allAdminRows ?? [])) {
-      // Grupiraj po adminu — dohvati sve apartmane za ovog admina
+      if (sentAdminIds.has(adminRow.user_id)) continue;
+      sentAdminIds.add(adminRow.user_id);
+
+      // Dohvati sve apartmane za ovog admina
       const adminAptIds = (allAdminRows ?? [])
         .filter((r) => r.user_id === adminRow.user_id)
         .map((r) => r.apartment_id);
-
-      // Izbjegni duplikate ako smo već poslali ovom adminu
-      if (digestsSent > 0 && adminRow.user_id === (allAdminRows ?? [])[digestsSent - 1]?.user_id) continue;
 
       const profile = (adminProfiles ?? []).find((p) => p.id === adminRow.user_id);
       if (!profile) continue;
