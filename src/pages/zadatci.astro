@@ -211,7 +211,7 @@ function getInitials(name: string): string {
 ---
 
 <AppLayout title="Zadatci" user={profile} isAdmin={true} activeRoute="/zadatci">
-  <div class="p-6 max-w-7xl mx-auto">
+  <div class="p-4 md:p-6 max-w-7xl mx-auto">
 
     <!-- Header -->
     <div class="flex items-center justify-between mb-6">
@@ -231,43 +231,76 @@ function getInitials(name: string): string {
 
 
     <!-- Tabovi i filter apartmana -->
-    <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
-      <!-- Tabovi -->
-      <div class="flex gap-1 bg-gray-100 rounded-lg p-1">
-        {[
-          { key: 'all', label: 'Svi' },
-          { key: 'active', label: 'Aktivni' },
-          { key: 'completed', label: 'Završeni' },
-        ].map((t) => (
-          <a
-            href={`/zadatci?status=${t.key}${filterApartmentId ? `&apartment_id=${filterApartmentId}` : ''}`}
-            class={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-              filterStatus === t.key
-                ? 'bg-white text-gray-900 shadow-sm'
-                : 'text-gray-500 hover:text-gray-700'
-            }`}
+    <div class="mb-4">
+
+      <!-- Mobile: dva selecta jedan ispod drugoga -->
+      <div class="md:hidden space-y-3">
+        <form method="GET" action="/zadatci" id="filter-form-mobile-status">
+          <input type="hidden" name="apartment_id" value={filterApartmentId} />
+          <select
+            name="status"
+            onchange="document.getElementById('filter-form-mobile-status').submit()"
+            class="input w-full py-2.5 text-sm"
           >
-            {t.label}
-          </a>
-        ))}
+            <option value="all" selected={filterStatus === 'all'}>Svi zadatci</option>
+            <option value="active" selected={filterStatus === 'active'}>Aktivni</option>
+            <option value="completed" selected={filterStatus === 'completed'}>Završeni</option>
+          </select>
+        </form>
+        <form method="GET" action="/zadatci" id="filter-form-mobile-apt">
+          <input type="hidden" name="status" value={filterStatus} />
+          <select
+            name="apartment_id"
+            onchange="document.getElementById('filter-form-mobile-apt').submit()"
+            class="input w-full py-2.5 text-sm"
+          >
+            <option value="">Svi apartmani</option>
+            {(isAdmin ? adminApartments : allUserApartments).map((apt) => (
+              <option value={apt.id} selected={filterApartmentId === apt.id}>
+                {apt.name}
+              </option>
+            ))}
+          </select>
+        </form>
       </div>
 
-      <!-- Filter apartman -->
-      <form method="GET" action="/zadatci" id="filter-form">
-        <input type="hidden" name="status" value={filterStatus} />
-        <select
-          name="apartment_id"
-          onchange="document.getElementById('filter-form').submit()"
-          class="input py-1.5 text-sm w-auto"
-        >
-          <option value="">Svi apartmani</option>
-          {(isAdmin ? adminApartments : allUserApartments).map((apt) => (
-            <option value={apt.id} selected={filterApartmentId === apt.id}>
-              {apt.name}
-            </option>
+      <!-- Desktop: tab pills + select -->
+      <div class="hidden md:flex items-center justify-between gap-3">
+        <div class="flex gap-1 bg-gray-100 rounded-lg p-1">
+          {[
+            { key: 'all', label: 'Svi' },
+            { key: 'active', label: 'Aktivni' },
+            { key: 'completed', label: 'Završeni' },
+          ].map((t) => (
+            <a
+              href={`/zadatci?status=${t.key}${filterApartmentId ? `&apartment_id=${filterApartmentId}` : ''}`}
+              class={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                filterStatus === t.key
+                  ? 'bg-white text-gray-900 shadow-sm'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              {t.label}
+            </a>
           ))}
-        </select>
-      </form>
+        </div>
+        <form method="GET" action="/zadatci" id="filter-form">
+          <input type="hidden" name="status" value={filterStatus} />
+          <select
+            name="apartment_id"
+            onchange="document.getElementById('filter-form').submit()"
+            class="input py-1.5 text-sm w-auto"
+          >
+            <option value="">Svi apartmani</option>
+            {(isAdmin ? adminApartments : allUserApartments).map((apt) => (
+              <option value={apt.id} selected={filterApartmentId === apt.id}>
+                {apt.name}
+              </option>
+            ))}
+          </select>
+        </form>
+      </div>
+
     </div>
 
     <!-- Tablica -->
