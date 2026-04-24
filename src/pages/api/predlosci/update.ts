@@ -7,15 +7,6 @@ export const POST: APIRoute = async ({ request, cookies, redirect }) => {
   if (!user) return redirect('/login');
 
   const adminSupabase = createSupabaseAdminClient();
-
-  const { data: auRows } = await adminSupabase
-    .from('apartment_users')
-    .select('role')
-    .eq('user_id', user.id);
-
-  const isAdmin = (auRows ?? []).some((r) => r.role === 'admin');
-  if (!isAdmin) return redirect('/predlosci?error=' + encodeURIComponent('Nemate ovlasti.'));
-
   const form = await request.formData();
   const id = (form.get('id') as string ?? '').trim();
   const name = (form.get('name') as string ?? '').trim();
@@ -25,10 +16,16 @@ export const POST: APIRoute = async ({ request, cookies, redirect }) => {
     return redirect('/predlosci?error=' + encodeURIComponent('Sva polja su obavezna.'));
   }
 
-  const { error } = await adminSupabase
-    .from('templates')
-    .update({ name, content })
-    .eq('id', id);
+  // Može urediti samo kreator ili admin
+  const { data: tmpl } = await adminSupabase.from('templates').select('created_by').eq('id', id).single();
+  const { data: auRows } = await adminSupabase.from('apartment_users').select('role').eq('user_id', user.id);
+  const isAdmin = (auRows ?? []).some((r) => r.role === 'admin');
+
+  if (tmpl?.created_by !== user.id && !isAdmin) {
+    return redirect('/predlosci?error=' + encodeURIComponent('Nemate ovlasti za uređivanje ovog predloška.'));
+  }
+
+  const { error } = await adminSupabase.from('templates').update({ name, content }).eq('id', id);
 
   if (error) {
     return redirect('/predlosci?error=' + encodeURIComponent('Greška pri ažuriranju.'));

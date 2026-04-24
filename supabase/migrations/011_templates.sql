@@ -17,24 +17,21 @@ CREATE TRIGGER templates_updated_at
   BEFORE UPDATE ON public.templates
   FOR EACH ROW EXECUTE PROCEDURE public.update_updated_at();
 
-CREATE POLICY "Admin vidi predloške"
+-- Svi autentificirani korisnici mogu vidjeti predloške
+CREATE POLICY "Autentificirani korisnici vide predloške"
   ON public.templates FOR SELECT
-  USING (
-    EXISTS (SELECT 1 FROM public.apartment_users WHERE user_id = auth.uid() AND role = 'admin')
-  );
+  USING (auth.uid() IS NOT NULL);
 
-CREATE POLICY "Admin može kreirati predloške"
+-- Svi autentificirani korisnici mogu dodavati predloške
+CREATE POLICY "Autentificirani korisnici mogu kreirati predloške"
   ON public.templates FOR INSERT
   WITH CHECK (auth.uid() = created_by);
 
-CREATE POLICY "Admin može urediti predloške"
+-- Samo kreator ili admin može urediti/obrisati (provjerava se u API ruti)
+CREATE POLICY "Autentificirani korisnici mogu urediti predloške"
   ON public.templates FOR UPDATE
-  USING (
-    EXISTS (SELECT 1 FROM public.apartment_users WHERE user_id = auth.uid() AND role = 'admin')
-  );
+  USING (auth.uid() IS NOT NULL);
 
-CREATE POLICY "Admin može obrisati predloške"
+CREATE POLICY "Autentificirani korisnici mogu obrisati predloške"
   ON public.templates FOR DELETE
-  USING (
-    EXISTS (SELECT 1 FROM public.apartment_users WHERE user_id = auth.uid() AND role = 'admin')
-  );
+  USING (auth.uid() IS NOT NULL);

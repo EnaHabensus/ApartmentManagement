@@ -7,15 +7,6 @@ export const POST: APIRoute = async ({ request, cookies, redirect }) => {
   if (!user) return redirect('/login');
 
   const adminSupabase = createSupabaseAdminClient();
-
-  const { data: auRows } = await adminSupabase
-    .from('apartment_users')
-    .select('role')
-    .eq('user_id', user.id);
-
-  const isAdmin = (auRows ?? []).some((r) => r.role === 'admin');
-  if (!isAdmin) return redirect('/predlosci?error=' + encodeURIComponent('Nemate ovlasti.'));
-
   const form = await request.formData();
   const name = (form.get('name') as string ?? '').trim();
   const content = (form.get('content') as string ?? '').trim();

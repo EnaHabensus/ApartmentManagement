@@ -13,20 +13,28 @@ const { data: myApartmentUsers } = await adminSupabase
   .from('apartment_users')
   .select('role')
   .eq('user_id', user.id);
-
 const isAdmin = (myApartmentUsers ?? []).some((au) => au.role === 'admin');
-if (!isAdmin) return Astro.redirect('/');
 
-const { data: templates } = await adminSupabase
+const { data: rawTemplates } = await adminSupabase
   .from('templates')
   .select('*')
   .order('created_at', { ascending: false });
 
-const success = Astro.url.searchParams.get('success');
-const error = Astro.url.searchParams.get('error');
+// Dohvati imena kreatora
+const creatorIds = [...new Set((rawTemplates ?? []).filter((t) => t.created_by).map((t) => t.created_by as string))];
+const { data: creatorProfiles } = creatorIds.length > 0
+  ? await adminSupabase.from('profiles').select('id, full_name').in('id', creatorIds)
+  : { data: [] };
+const creatorMap = new Map((creatorProfiles ?? []).map((p) => [p.id, p.full_name]));
+
+const templates = (rawTemplates ?? []).map((t) => ({
+  ...t,
+  creator_name: t.created_by ? (creatorMap.get(t.created_by) ?? 'Nepoznat') : null,
+  is_mine: t.created_by === user.id,
+}));
 ---
 
-<AppLayout title="Predlošci" user={profile} isAdmin={true} activeRoute="/predlosci">
+<AppLayout title="Predlošci" user={profile} isAdmin={isAdmin} activeRoute="/predlosci">
   <div class="p-4 md:p-6 max-w-7xl mx-auto">
 
     <!-- Header -->
@@ -34,19 +42,16 @@ const error = Astro.url.searchParams.get('error');
       <div>
         <h1 class="text-2xl font-bold text-gray-900">Predlošci</h1>
         <p class="text-gray-500 text-sm mt-1">
-          {(templates ?? []).length} predložak{(templates ?? []).length === 1 ? '' : (templates ?? []).length < 5 ? 'a' : 'a'}
+          {templates.length} predložak{templates.length === 1 ? '' : templates.length < 5 ? 'a' : 'a'}
         </p>
       </div>
-      <button
-        onclick="openAddModal()"
-        class="btn-primary"
-      >
+      <button onclick="openAddModal()" class="btn-primary">
         + Dodaj predložak
       </button>
     </div>
 
     <!-- Lista predložaka -->
-    {(templates ?? []).length === 0 ? (
+    {templates.length === 0 ? (
       <div class="card p-12 text-center">
         <div class="text-gray-400 mb-4">
           <svg class="mx-auto h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -62,10 +67,15 @@ const error = Astro.url.searchParams.get('error');
       </div>
     ) : (
       <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-        {(templates ?? []).map((t) => (
+        {templates.map((t) => (
           <div class="card p-5 flex flex-col gap-3">
-            <!-- Naziv -->
-            <h3 class="font-semibold text-gray-900 text-base">{t.name}</h3>
+            <!-- Naziv + kreator -->
+            <div class="flex items-start justify-between gap-2">
+              <h3 class="font-semibold text-gray-900 text-base">{t.name}</h3>
+            </div>
+            {t.creator_name && (
+              <p class="text-xs text-gray-400 -mt-2">Kreirao: {t.creator_name}</p>
+            )}
 
             <!-- Sadržaj (preview) -->
             <p class="text-sm text-gray-600 leading-relaxed line-clamp-4 flex-1 whitespace-pre-wrap">{t.content}</p>
@@ -73,18 +83,22 @@ const error = Astro.url.searchParams.get('error');
             <!-- Akcije -->
             <div class="flex items-center justify-between pt-2 border-t border-gray-100">
               <div class="flex items-center gap-1">
-                <button
-                  onclick={`openEditModal(${JSON.stringify({ id: t.id, name: t.name, content: t.content })})`}
-                  class="btn-ghost text-xs px-2 py-1"
-                >
-                  Uredi
-                </button>
-                <button
-                  onclick={`confirmDelete('${t.id}', '${t.name.replace(/'/g, "\\'")}')`}
-                  class="btn-ghost text-xs px-2 py-1 text-red-500 hover:bg-red-50 hover:text-red-700"
-                >
-                  Obriši
-                </button>
+                {(t.is_mine || isAdmin) && (
+                  <>
+                    <button
+                      onclick={`openEditModal(${JSON.stringify({ id: t.id, name: t.name, content: t.content })})`}
+                      class="btn-ghost text-xs px-2 py-1"
+                    >
+                      Uredi
+                    </button>
+                    <button
+                      onclick={`confirmDelete('${t.id}', '${t.name.replace(/'/g, "\\'")}')`}
+                      class="btn-ghost text-xs px-2 py-1 text-red-500 hover:bg-red-50 hover:text-red-700"
+                    >
+                      Obriši
+                    </button>
+                  </>
+                )}
               </div>
               <button
                 data-content={t.content}
@@ -117,18 +131,10 @@ const error = Astro.url.searchParams.get('error');
         </div>
         <div>
           <label class="label">Sadržaj *</label>
-          <textarea
-            name="content"
-            required
-            rows="8"
-            class="input resize-none"
-            placeholder="Unesite tekst predloška..."
-          ></textarea>
+          <textarea name="content" required rows="8" class="input resize-none" placeholder="Unesite tekst predloška..."></textarea>
         </div>
         <div class="flex justify-end gap-3 pt-2">
-          <button type="button" onclick="document.getElementById('modal-add').classList.add('hidden')" class="btn-secondary">
-            Odustani
-          </button>
+          <button type="button" onclick="document.getElementById('modal-add').classList.add('hidden')" class="btn-secondary">Odustani</button>
           <button type="submit" class="btn-primary">Spremi</button>
         </div>
       </form>
@@ -149,18 +155,10 @@ const error = Astro.url.searchParams.get('error');
         </div>
         <div>
           <label class="label">Sadržaj *</label>
-          <textarea
-            id="edit-content"
-            name="content"
-            required
-            rows="8"
-            class="input resize-none"
-          ></textarea>
+          <textarea id="edit-content" name="content" required rows="8" class="input resize-none"></textarea>
         </div>
         <div class="flex justify-end gap-3 pt-2">
-          <button type="button" onclick="document.getElementById('modal-edit').classList.add('hidden')" class="btn-secondary">
-            Odustani
-          </button>
+          <button type="button" onclick="document.getElementById('modal-edit').classList.add('hidden')" class="btn-secondary">Odustani</button>
           <button type="submit" class="btn-primary">Spremi promjene</button>
         </div>
       </form>
@@ -178,9 +176,7 @@ const error = Astro.url.searchParams.get('error');
       <form action="/api/predlosci/delete" method="POST">
         <input type="hidden" name="id" id="delete-id" />
         <div class="flex justify-end gap-3">
-          <button type="button" onclick="document.getElementById('modal-delete').classList.add('hidden')" class="btn-secondary">
-            Odustani
-          </button>
+          <button type="button" onclick="document.getElementById('modal-delete').classList.add('hidden')" class="btn-secondary">Odustani</button>
           <button type="submit" class="btn-danger">Obriši</button>
         </div>
       </form>
