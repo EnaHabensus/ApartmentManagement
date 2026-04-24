@@ -9,7 +9,7 @@ interface Props {
 
 const { user, isAdmin, activeRoute } = Astro.props;
 
-const adminNav = [
+const nav = [
   { href: '/',           label: 'Dashboard',  icon: 'chart' },
   { href: '/rezervacije',label: 'Rezervacije',icon: 'calendar-days' },
   { href: '/kalendar',   label: 'Kalendar',   icon: 'calendar' },
@@ -21,13 +21,6 @@ const adminNav = [
   { href: '/zadatci',    label: 'Zadatci',    icon: 'check-square' },
   { href: '/predlosci',  label: 'Predlošci',  icon: 'template' },
 ];
-
-const staffNav = [
-  { href: '/zadatci',   label: 'Zadatci',   icon: 'check-square' },
-  { href: '/predlosci', label: 'Predlošci', icon: 'template' },
-];
-
-const nav = isAdmin ? adminNav : staffNav;
 
 function isActive(href: string): boolean {
   if (href === '/') return activeRoute === '/';
