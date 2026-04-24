@@ -57,11 +57,37 @@ const templates = (rawTemplates ?? []).map((t) => ({
       <div>
         <h1 class="text-2xl font-bold text-gray-900">Predlošci</h1>
         <p class="text-gray-500 text-sm mt-1">
-          {templates.length} predložak{templates.length === 1 ? '' : templates.length < 5 ? 'a' : 'a'}
+          <span id="template-count">{templates.length} predložak{templates.length === 1 ? '' : templates.length < 5 ? 'a' : 'a'}</span>
         </p>
       </div>
       <button onclick="openAddModal()" class="btn-primary">+ Dodaj predložak</button>
     </div>
+
+    <!-- Search + Filter -->
+    {templates.length > 0 && (
+      <div class="mb-4 flex flex-col md:flex-row gap-3">
+        <div class="relative flex-1">
+          <svg class="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+          </svg>
+          <input
+            type="text"
+            id="search-input"
+            placeholder="Pretraži predloške..."
+            oninput="applyFilters()"
+            class="input w-full pl-9"
+          />
+        </div>
+        {aptData && aptData.length > 0 && (
+          <select id="apt-filter" onchange="applyFilters()" class="input w-full md:w-56">
+            <option value="">Svi apartmani</option>
+            {aptData.map((apt) => (
+              <option value={apt.id}>{apt.name}</option>
+            ))}
+          </select>
+        )}
+      </div>
+    )}
 
     <!-- Lista predložaka -->
     {templates.length === 0 ? (
@@ -79,9 +105,15 @@ const templates = (rawTemplates ?? []).map((t) => ({
         <button onclick="openAddModal()" class="btn-primary">+ Dodaj predložak</button>
       </div>
     ) : (
-      <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-        {templates.map((t) => (
-          <div class="card p-5 flex flex-col gap-3">
+      <>
+        <div id="template-grid" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {templates.map((t) => (
+            <div
+              class="card p-5 flex flex-col gap-3 template-card"
+              data-name={t.name.toLowerCase()}
+              data-content={t.content.toLowerCase()}
+              data-apt-ids={JSON.stringify(t.apt_ids)}
+            >
             <!-- Naziv -->
             <h3 class="font-semibold text-gray-900 text-base">{t.name}</h3>
 
@@ -144,9 +176,16 @@ const templates = (rawTemplates ?? []).map((t) => ({
                 Kopiraj
               </button>
             </div>
-          </div>
-        ))}
-      </div>
+            </div>
+          ))}
+        </div>
+
+        <!-- Nema rezultata pretrage -->
+        <div id="no-results" class="hidden card p-10 text-center">
+          <p class="text-gray-500">Nema predložaka koji odgovaraju pretrazi.</p>
+          <button onclick="clearFilters()" class="mt-3 text-sm text-blue-600 hover:underline">Poništi filtere</button>
+        </div>
+      </>
     )}
   </div>
 
@@ -323,6 +362,52 @@ const templates = (rawTemplates ?? []).map((t) => ({
     document.getElementById('edit-apartment_ids').value = JSON.stringify(ids);
   });
 
+  function applyFilters() {
+    const search = (document.getElementById('search-input') as HTMLInputElement)?.value.toLowerCase().trim() ?? '';
+    const aptId = (document.getElementById('apt-filter') as HTMLSelectElement)?.value ?? '';
+
+    const cards = document.querySelectorAll<HTMLElement>('.template-card');
+    let visible = 0;
+
+    cards.forEach((card) => {
+      const name = card.dataset.name ?? '';
+      const content = card.dataset.content ?? '';
+      const aptIds: string[] = JSON.parse(card.dataset.aptIds ?? '[]');
+
+      const matchSearch = !search || name.includes(search) || content.includes(search);
+      const matchApt = !aptId || aptIds.includes(aptId);
+
+      if (matchSearch && matchApt) {
+        card.classList.remove('hidden');
+        visible++;
+      } else {
+        card.classList.add('hidden');
+      }
+    });
+
+    // Ažuriraj brojač
+    const total = cards.length;
+    const countEl = document.getElementById('template-count');
+    if (countEl) {
+      const n = visible;
+      countEl.textContent = `${n} predložak${n === 1 ? '' : n < 5 ? 'a' : 'a'}${visible < total ? ` (od ${total})` : ''}`;
+    }
+
+    // Prikaži/sakrij "nema rezultata"
+    document.getElementById('no-results')?.classList.toggle('hidden', visible > 0);
+    document.getElementById('template-grid')?.classList.toggle('hidden', visible === 0);
+  }
+
+  function clearFilters() {
+    const searchEl = document.getElementById('search-input') as HTMLInputElement;
+    const aptEl = document.getElementById('apt-filter') as HTMLSelectElement;
+    if (searchEl) searchEl.value = '';
+    if (aptEl) aptEl.value = '';
+    applyFilters();
+  }
+
+  window.applyFilters = applyFilters;
+  window.clearFilters = clearFilters;
   window.closeModalOnOverlay = closeModalOnOverlay;
   window.openAddModal = openAddModal;
   window.openEditModal = openEditModal;
