@@ -7,20 +7,34 @@ const { data: { user } } = await supabase.auth.getUser();
 if (!user) return Astro.redirect('/login');
 
 const profile = Astro.locals.user!;
+const isAdmin = Astro.locals.isAdmin ?? false;
 const adminSupabase = createSupabaseAdminClient();
 
-const { data: myApartmentUsers } = await adminSupabase
+// Dohvati apartmane ovog korisnika (za multi-select u formi)
+const { data: myAptUsers } = await adminSupabase
   .from('apartment_users')
-  .select('role')
+  .select('apartment_id')
   .eq('user_id', user.id);
-const isAdmin = (myApartmentUsers ?? []).some((au) => au.role === 'admin');
+const myAptIds = (myAptUsers ?? []).map((au) => au.apartment_id);
 
+const { data: myApartments } = myAptIds.length > 0
+  ? await adminSupabase.from('apartments').select('id, name, color').in('id', myAptIds).eq('is_deleted', false).order('name')
+  : { data: [] };
+
+// Dohvati predloške
 const { data: rawTemplates } = await adminSupabase
   .from('templates')
   .select('*')
   .order('created_at', { ascending: false });
 
-// Dohvati imena kreatora
+// Dohvati nazive apartmana za prikaz na karticama
+const allAptIds = [...new Set((rawTemplates ?? []).flatMap((t) => (t.apartment_ids as string[]) ?? []))];
+const { data: aptData } = allAptIds.length > 0
+  ? await adminSupabase.from('apartments').select('id, name, color').in('id', allAptIds)
+  : { data: [] };
+const aptMap = new Map((aptData ?? []).map((a) => [a.id, a]));
+
+// Dohvati kreatore
 const creatorIds = [...new Set((rawTemplates ?? []).filter((t) => t.created_by).map((t) => t.created_by as string))];
 const { data: creatorProfiles } = creatorIds.length > 0
   ? await adminSupabase.from('profiles').select('id, full_name').in('id', creatorIds)
@@ -31,6 +45,7 @@ const templates = (rawTemplates ?? []).map((t) => ({
   ...t,
   creator_name: t.created_by ? (creatorMap.get(t.created_by) ?? 'Nepoznat') : null,
   is_mine: t.created_by === user.id,
+  apt_ids: (t.apartment_ids as string[]) ?? [],
 }));
 ---
 
@@ -45,9 +60,7 @@ const templates = (rawTemplates ?? []).map((t) => ({
           {templates.length} predložak{templates.length === 1 ? '' : templates.length < 5 ? 'a' : 'a'}
         </p>
       </div>
-      <button onclick="openAddModal()" class="btn-primary">
-        + Dodaj predložak
-      </button>
+      <button onclick="openAddModal()" class="btn-primary">+ Dodaj predložak</button>
     </div>
 
     <!-- Lista predložaka -->
@@ -69,12 +82,31 @@ const templates = (rawTemplates ?? []).map((t) => ({
       <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
         {templates.map((t) => (
           <div class="card p-5 flex flex-col gap-3">
-            <!-- Naziv + kreator -->
-            <div class="flex items-start justify-between gap-2">
-              <h3 class="font-semibold text-gray-900 text-base">{t.name}</h3>
-            </div>
+            <!-- Naziv -->
+            <h3 class="font-semibold text-gray-900 text-base">{t.name}</h3>
+
+            <!-- Kreator -->
             {t.creator_name && (
               <p class="text-xs text-gray-400 -mt-2">Kreirao: {t.creator_name}</p>
+            )}
+
+            <!-- Apartmani -->
+            {t.apt_ids.length > 0 && (
+              <div class="flex flex-wrap gap-1">
+                {t.apt_ids.map((aptId) => {
+                  const apt = aptMap.get(aptId);
+                  if (!apt) return null;
+                  const color = (apt as any).color ?? '#3B82F6';
+                  return (
+                    <span
+                      class="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium"
+                      style={`background-color: ${color}20; color: ${color}; box-shadow: inset 0 0 0 1px ${color}40`}
+                    >
+                      {apt.name}
+                    </span>
+                  );
+                })}
+              </div>
             )}
 
             <!-- Sadržaj (preview) -->
@@ -86,7 +118,7 @@ const templates = (rawTemplates ?? []).map((t) => ({
                 {(t.is_mine || isAdmin) && (
                   <>
                     <button
-                      onclick={`openEditModal(${JSON.stringify({ id: t.id, name: t.name, content: t.content })})`}
+                      onclick={`openEditModal(${JSON.stringify({ id: t.id, name: t.name, content: t.content, apartment_ids: t.apt_ids })})`}
                       class="btn-ghost text-xs px-2 py-1"
                     >
                       Uredi
@@ -124,7 +156,7 @@ const templates = (rawTemplates ?? []).map((t) => ({
       <div class="p-6 border-b border-gray-100">
         <h2 class="text-lg font-semibold text-gray-900">Dodaj predložak</h2>
       </div>
-      <form action="/api/predlosci/create" method="POST" class="p-6 space-y-5">
+      <form action="/api/predlosci/create" method="POST" class="p-6 space-y-5" id="form-add">
         <div>
           <label class="label">Naziv predloška *</label>
           <input name="name" type="text" required class="input" placeholder="npr. Check-in poruka" />
@@ -133,6 +165,24 @@ const templates = (rawTemplates ?? []).map((t) => ({
           <label class="label">Sadržaj *</label>
           <textarea name="content" required rows="8" class="input resize-none" placeholder="Unesite tekst predloška..."></textarea>
         </div>
+        {(myApartments ?? []).length > 0 && (
+          <div>
+            <label class="label">Apartmani</label>
+            <div class="space-y-2 mt-1">
+              {(myApartments ?? []).map((apt) => (
+                <label class="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    class="add-apt-cb h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    value={apt.id}
+                  />
+                  <span class="text-sm text-gray-700">{apt.name}</span>
+                </label>
+              ))}
+            </div>
+            <input type="hidden" name="apartment_ids" id="add-apartment_ids" value="[]" />
+          </div>
+        )}
         <div class="flex justify-end gap-3 pt-2">
           <button type="button" onclick="document.getElementById('modal-add').classList.add('hidden')" class="btn-secondary">Odustani</button>
           <button type="submit" class="btn-primary">Spremi</button>
@@ -147,7 +197,7 @@ const templates = (rawTemplates ?? []).map((t) => ({
       <div class="p-6 border-b border-gray-100">
         <h2 class="text-lg font-semibold text-gray-900">Uredi predložak</h2>
       </div>
-      <form action="/api/predlosci/update" method="POST" class="p-6 space-y-5">
+      <form action="/api/predlosci/update" method="POST" class="p-6 space-y-5" id="form-edit">
         <input type="hidden" name="id" id="edit-id" />
         <div>
           <label class="label">Naziv predloška *</label>
@@ -157,6 +207,24 @@ const templates = (rawTemplates ?? []).map((t) => ({
           <label class="label">Sadržaj *</label>
           <textarea id="edit-content" name="content" required rows="8" class="input resize-none"></textarea>
         </div>
+        {(myApartments ?? []).length > 0 && (
+          <div>
+            <label class="label">Apartmani</label>
+            <div class="space-y-2 mt-1">
+              {(myApartments ?? []).map((apt) => (
+                <label class="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    class="edit-apt-cb h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    value={apt.id}
+                  />
+                  <span class="text-sm text-gray-700">{apt.name}</span>
+                </label>
+              ))}
+            </div>
+            <input type="hidden" name="apartment_ids" id="edit-apartment_ids" value="[]" />
+          </div>
+        )}
         <div class="flex justify-end gap-3 pt-2">
           <button type="button" onclick="document.getElementById('modal-edit').classList.add('hidden')" class="btn-secondary">Odustani</button>
           <button type="submit" class="btn-primary">Spremi promjene</button>
@@ -183,7 +251,6 @@ const templates = (rawTemplates ?? []).map((t) => ({
     </div>
   </div>
 
-  <!-- Toast -->
   <div id="toast" class="hidden fixed bottom-4 right-4 z-50 rounded-lg px-4 py-3 text-sm font-medium shadow-lg"></div>
 </AppLayout>
 
@@ -206,15 +273,18 @@ const templates = (rawTemplates ?? []).map((t) => ({
   }
 
   function openAddModal() {
-    const modal = document.getElementById('modal-add');
-    modal?.querySelector('form')?.reset();
-    modal?.classList.remove('hidden');
+    document.getElementById('modal-add')?.querySelector('form')?.reset();
+    document.querySelectorAll('.add-apt-cb').forEach((cb) => (cb as HTMLInputElement).checked = false);
+    document.getElementById('modal-add')?.classList.remove('hidden');
   }
 
   function openEditModal(t) {
     document.getElementById('edit-id').value = t.id;
     document.getElementById('edit-name').value = t.name;
     document.getElementById('edit-content').value = t.content;
+    document.querySelectorAll('.edit-apt-cb').forEach((cb) => {
+      (cb as HTMLInputElement).checked = (t.apartment_ids ?? []).includes((cb as HTMLInputElement).value);
+    });
     document.getElementById('modal-edit')?.classList.remove('hidden');
   }
 
@@ -241,6 +311,17 @@ const templates = (rawTemplates ?? []).map((t) => ({
       showToast('Kopiranje nije uspjelo.', 'error');
     }
   }
+
+  // Skupi checkboxe u hidden input prije submita
+  document.getElementById('form-add')?.addEventListener('submit', () => {
+    const ids = [...document.querySelectorAll('.add-apt-cb:checked')].map((cb) => (cb as HTMLInputElement).value);
+    document.getElementById('add-apartment_ids').value = JSON.stringify(ids);
+  });
+
+  document.getElementById('form-edit')?.addEventListener('submit', () => {
+    const ids = [...document.querySelectorAll('.edit-apt-cb:checked')].map((cb) => (cb as HTMLInputElement).value);
+    document.getElementById('edit-apartment_ids').value = JSON.stringify(ids);
+  });
 
   window.closeModalOnOverlay = closeModalOnOverlay;
   window.openAddModal = openAddModal;

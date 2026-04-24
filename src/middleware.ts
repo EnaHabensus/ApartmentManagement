@@ -60,6 +60,13 @@ export const onRequest = defineMiddleware(async (context, next) => {
 
     context.locals.user = profile;
 
+    // Izračunaj isAdmin jednom za cijeli request
+    const { data: auRows } = await supabase
+      .from('apartment_users')
+      .select('role')
+      .eq('user_id', user.id);
+    context.locals.isAdmin = (auRows ?? []).some((r: any) => r.role === 'admin');
+
     // Ažuriraj has_logged_in ako je prvi put
     if (profile && !profile.has_logged_in) {
       await supabase

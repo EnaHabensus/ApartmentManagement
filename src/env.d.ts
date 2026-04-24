@@ -18,5 +18,6 @@ declare namespace App {
   interface Locals extends Runtime {
     user: import('./lib/types').Profile | null;
     supabase: import('@supabase/supabase-js').SupabaseClient;
+    isAdmin: boolean;
   }
 }
