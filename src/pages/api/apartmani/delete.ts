@@ -1,5 +1,6 @@
 import type { APIRoute } from 'astro';
 import { createSupabaseServerClient, createSupabaseAdminClient } from '../../../lib/supabase';
+import { sendRemovedFromApartmentEmail } from '../../../lib/resend';
 
 export const POST: APIRoute = async ({ request, cookies, redirect }) => {
   const supabase = createSupabaseServerClient(request, cookies);
@@ -33,6 +34,37 @@ export const POST: APIRoute = async ({ request, cookies, redirect }) => {
     .update({ status: 'cancelled' })
     .eq('apartment_id', id)
     .eq('status', 'active');
+
+  // Dohvati podatke apartmana i korisnike prije brisanja
+  const { data: apartment } = await adminSupabase
+    .from('apartments')
+    .select('name')
+    .eq('id', id)
+    .single();
+
+  const { data: auRows } = await adminSupabase
+    .from('apartment_users')
+    .select('user_id')
+    .eq('apartment_id', id)
+    .neq('user_id', user.id); // ne šaljemo mail sebi (admin koji briše)
+
+  if (auRows && auRows.length > 0 && apartment) {
+    const userIds = auRows.map((r) => r.user_id);
+    const { data: profiles } = await adminSupabase
+      .from('profiles')
+      .select('full_name, email')
+      .in('id', userIds);
+
+    await Promise.allSettled(
+      (profiles ?? []).map((p) =>
+        sendRemovedFromApartmentEmail({
+          to: p.email,
+          userName: p.full_name,
+          apartmentName: apartment.name,
+        })
+      )
+    );
+  }
 
   // Ukloni sve korisnike i pomoćno osoblje s apartmana
   await adminSupabase.from('apartment_users').delete().eq('apartment_id', id);

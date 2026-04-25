@@ -655,3 +655,36 @@ export async function sendTaskReminderExternalEmail({
     `,
   });
 }
+
+// ─── Email: Uklonjen s apartmana ─────────────────────────────────────────────
+export async function sendRemovedFromApartmentEmail({
+  to,
+  userName,
+  apartmentName,
+}: {
+  to: string;
+  userName: string;
+  apartmentName: string;
+}) {
+  return sendEmail({
+    from: getFromEmail(),
+    to,
+    subject: `Uklonjen/a ste s apartmana "${apartmentName}"`,
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #111827;">
+        <div style="background: #0F2544; padding: 24px 32px; border-radius: 8px 8px 0 0;">
+          <h1 style="color: white; margin: 0; font-size: 20px;">Moji Apartmani</h1>
+        </div>
+        <div style="background: #F9FAFB; padding: 32px; border-radius: 0 0 8px 8px; border: 1px solid #E5E7EB; border-top: none;">
+          <p style="margin: 0 0 16px;">Pozdrav, <strong>${userName}</strong>!</p>
+          <p style="margin: 0 0 24px; color: #374151;">
+            Obavještavamo vas da ste uklonjeni s apartmana <strong>${apartmentName}</strong> te više nemate pristup njegovim podacima.
+          </p>
+          <p style="margin: 0; font-size: 13px; color: #6B7280;">
+            Ako mislite da se radi o grešci, obratite se administratoru.
+          </p>
+        </div>
+      </div>
+    `,
+  });
+}
