@@ -30,7 +30,7 @@ const { data: rawTemplates } = await adminSupabase
 // Dohvati nazive apartmana za prikaz na karticama
 const allAptIds = [...new Set((rawTemplates ?? []).flatMap((t) => (t.apartment_ids as string[]) ?? []))];
 const { data: aptData } = allAptIds.length > 0
-  ? await adminSupabase.from('apartments').select('id, name, color').in('id', allAptIds)
+  ? await adminSupabase.from('apartments').select('id, name, color').in('id', allAptIds).eq('is_deleted', false)
   : { data: [] };
 const aptMap = new Map((aptData ?? []).map((a) => [a.id, a]));
 
