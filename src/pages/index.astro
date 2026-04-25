@@ -63,15 +63,6 @@ if (dateTo) query = query.lte('check_in', dateTo);
 
 const { data: reservations } = await query;
 
-// Ukupan broj rezervacija (uključuje otkazane) — poseban upit bez status filtera
-let totalQuery = supabase
-  .from('reservations')
-  .select('id', { count: 'exact', head: true })
-  .in('apartment_id', filteredAptIds.length ? filteredAptIds : ['none']);
-if (dateFrom) totalQuery = totalQuery.gte('check_in', dateFrom);
-if (dateTo) totalQuery = totalQuery.lte('check_in', dateTo);
-const { count: totalRezCount } = await totalQuery;
-
 // KPI izračuni
 const activeRez = reservations ?? [];
 const bruttoSum = activeRez.reduce((s, r) => s + (r.amount_gross ?? 0), 0);
@@ -277,7 +268,7 @@ function nights(ci: string, co: string) {
           { label: 'Neto zarada', value: `€ ${nettoSum.toFixed(2)}` },
           { label: 'Provizija', value: `€ ${commissionSum.toFixed(2)}` },
           { label: 'Popunjenost', value: `${occupancy}%` },
-          { label: 'Ukupno rezervacija', value: String(totalRezCount ?? 0) },
+          { label: 'Ukupno rezervacija', value: String(activeRez.length) },
           { label: 'Završene smjene', value: String(completedCount) },
         ].map(({ label, value }) => (
           <div class="card px-4 py-5 md:p-4 flex-shrink-0 w-44 md:w-auto snap-start">

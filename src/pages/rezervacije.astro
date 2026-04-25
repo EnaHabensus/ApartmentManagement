@@ -83,7 +83,7 @@ const { data: allReservations } = await adminSupabase
   .in('apartment_id', aptIds.length > 0 ? aptIds : ['none']);
 
 const kpi = {
-  sve: (allReservations ?? []).length,
+  sve: (allReservations ?? []).filter((r) => r.status !== 'cancelled').length,
   uToku: (allReservations ?? []).filter((r) => getReservationStatus(r) === 'active').length,
   nadolazece: (allReservations ?? []).filter((r) => getReservationStatus(r) === 'upcoming').length,
   zavrsene: (allReservations ?? []).filter((r) => getReservationStatus(r) === 'completed').length,
