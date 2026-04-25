@@ -138,9 +138,23 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     const { data: profiles } = await adminSupabase.from('profiles').select('id, full_name, email').in('id', allChangedUserIds);
     const profileMap = new Map((profiles ?? []).map((p: any) => [p.id, p]));
 
+    let userTokenMap = new Map<string, string>();
+    if (addedUserIds.length > 0 && task) {
+      const { data: userTokenRows } = await adminSupabase.from('task_assignees').select('user_id, completion_token').eq('task_id', task.id).not('user_id', 'is', null);
+      userTokenMap = new Map((userTokenRows ?? []).map((r: any) => [r.user_id, r.completion_token]));
+    }
+
     for (const uid of addedUserIds) {
       const p = profileMap.get(uid);
-      if (p) emailPromises.push(sendTaskAssignedEmail({ to: p.email, assigneeName: p.full_name, apartmentName, taskTitle: 'Čišćenje', dueDate, dueTime: checkOutTime }).catch(() => {}));
+      if (p) {
+        const token = userTokenMap.get(uid);
+        emailPromises.push(sendTaskAssignedEmail({
+          to: p.email, assigneeName: p.full_name,
+          apartmentName, taskTitle: 'Čišćenje',
+          dueDate, dueTime: checkOutTime,
+          completionUrl: token ? `${appUrl}/api/zadatci/complete-token?token=${token}` : undefined,
+        }).catch(() => {}));
+      }
     }
     for (const uid of removedUserIds) {
       const p = profileMap.get(uid);
