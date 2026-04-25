@@ -34,5 +34,13 @@ export const POST: APIRoute = async ({ request, cookies, redirect }) => {
     .eq('apartment_id', id)
     .eq('status', 'active');
 
+  // Ukloni sve korisnike i pomoćno osoblje s apartmana
+  await adminSupabase.from('apartment_users').delete().eq('apartment_id', id);
+  await adminSupabase.from('apartment_external_members').delete().eq('apartment_id', id);
+
+  // Ukloni zadatke i troškove apartmana
+  await adminSupabase.from('tasks').delete().eq('apartment_id', id);
+  await adminSupabase.from('expenses').delete().eq('apartment_id', id);
+
   return redirect('/apartmani?success=deleted');
 };
